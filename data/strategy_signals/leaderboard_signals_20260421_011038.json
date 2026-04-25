@@ -1,0 +1,97 @@
+[
+  {
+    "type": "LEADERBOARD_CHASER",
+    "rank": 1,
+    "strategy": "Follow top performer",
+    "trader_username": "0x2a2C53bD278c04DA9962Fcf96490E17F3DfB9Bc1-1772479215461",
+    "trader_address": "0x2a2c53bd278c04da9962fcf96490e17f3dfb9bc1",
+    "profit": 2891707.1056886227,
+    "volume": 122606482.58092603,
+    "timeframe": "unknown",
+    "signal_strength": "HIGH",
+    "action_consideration": "Research recent winning markets of 0x2a2C53bD278c04DA9962Fcf96490E17F3DfB9Bc1-1772479215461 and look for similar new opportunities",
+    "next_steps": [
+      "Visit trader profile: https://polymarket.com/profile/0x2a2c53bd278c04da9962fcf96490e17f3dfb9bc1",
+      "Check their recent transaction history for market patterns",
+      "Look for new markets in similar categories/events",
+      "Consider entering early on similar market structures"
+    ],
+    "timestamp": "2026-04-21T01:10:38.573293"
+  },
+  {
+    "type": "LEADERBOARD_CHASER",
+    "rank": 2,
+    "strategy": "Follow top performer",
+    "trader_username": "RN1",
+    "trader_address": "0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
+    "profit": 2260234.3959201295,
+    "volume": 100669707.73123802,
+    "timeframe": "unknown",
+    "signal_strength": "HIGH",
+    "action_consideration": "Research recent winning markets of RN1 and look for similar new opportunities",
+    "next_steps": [
+      "Visit trader profile: https://polymarket.com/profile/0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
+      "Check their recent transaction history for market patterns",
+      "Look for new markets in similar categories/events",
+      "Consider entering early on similar market structures"
+    ],
+    "timestamp": "2026-04-21T01:10:38.573305"
+  },
+  {
+    "type": "LEADERBOARD_CHASER",
+    "rank": 3,
+    "strategy": "Follow top performer",
+    "trader_username": "sovereign2013",
+    "trader_address": "0xee613b3fc183ee44f9da9c05f53e2da107e3debf",
+    "profit": 1861795.098489503,
+    "volume": 48030967.130036995,
+    "timeframe": "unknown",
+    "signal_strength": "HIGH",
+    "action_consideration": "Research recent winning markets of sovereign2013 and look for similar new opportunities",
+    "next_steps": [
+      "Visit trader profile: https://polymarket.com/profile/0xee613b3fc183ee44f9da9c05f53e2da107e3debf",
+      "Check their recent transaction history for market patterns",
+      "Look for new markets in similar categories/events",
+      "Consider entering early on similar market structures"
+    ],
+    "timestamp": "2026-04-21T01:10:38.573309"
+  },
+  {
+    "type": "LEADERBOARD_CHASER",
+    "rank": 4,
+    "strategy": "Follow top performer",
+    "trader_username": "CemeterySun",
+    "trader_address": "0x37c1874a60d348903594a96703e0507c518fc53a",
+    "profit": 1548082.653087154,
+    "volume": 55428245.560445994,
+    "timeframe": "unknown",
+    "signal_strength": "HIGH",
+    "action_consideration": "Research recent winning markets of CemeterySun and look for similar new opportunities",
+    "next_steps": [
+      "Visit trader profile: https://polymarket.com/profile/0x37c1874a60d348903594a96703e0507c518fc53a",
+      "Check their recent transaction history for market patterns",
+      "Look for new markets in similar categories/events",
+      "Consider entering early on similar market structures"
+    ],
+    "timestamp": "2026-04-21T01:10:38.573312"
+  },
+  {
+    "type": "LEADERBOARD_CHASER",
+    "rank": 5,
+    "strategy": "Follow top performer",
+    "trader_username": "elkmonkey",
+    "trader_address": "0xead152b855effa6b5b5837f53b24c0756830c76a",
+    "profit": 1501138.6585457688,
+    "volume": 44177980.68274701,
+    "timeframe": "unknown",
+    "signal_strength": "HIGH",
+    "action_consideration": "Research recent winning markets of elkmonkey and look for similar new opportunities",
+    "next_steps": [
+      "Visit trader profile: https://polymarket.com/profile/0xead152b855effa6b5b5837f53b24c0756830c76a",
+      "Check their recent transaction history for market patterns",
+      "Look for new markets in similar categories/events",
+      "Consider entering early on similar market structures"
+    ],
+    "timestamp": "2026-04-21T01:10:38.573314"
+  }
+]

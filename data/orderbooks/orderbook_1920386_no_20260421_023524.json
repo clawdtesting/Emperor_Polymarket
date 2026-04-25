@@ -1,0 +1,20 @@
+{
+  "market_question": "Map 2: Odd/Even Total Kills?",
+  "market_id": "1920386",
+  "condition_id": "0xd68eba88a78ec3a9b0fa23293291e9ae3b81a0a868cc84bfab9263b1101f56fb",
+  "outcome": "no",
+  "token_id": "87731352774372556464428295166965948934888764088961038606294318453183039508664",
+  "timestamp": "2026-04-21T02:35:24.054330",
+  "orderbook": {
+    "market": "0xd68eba88a78ec3a9b0fa23293291e9ae3b81a0a868cc84bfab9263b1101f56fb",
+    "asset_id": "87731352774372556464428295166965948934888764088961038606294318453183039508664",
+    "timestamp": "1776348201706",
+    "hash": "371ce8fc62e9901200fdddbe44a2232324638bb8",
+    "bids": [],
+    "asks": [],
+    "min_order_size": "5",
+    "tick_size": "0.01",
+    "neg_risk": false,
+    "last_trade_price": ""
+  }
+}

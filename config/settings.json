@@ -1,0 +1,26 @@
+{
+  "polymarket": {
+    "gamma_api": "https://gamma-api.polymarket.com",
+    "clob_api": "https://clob.polymarket.com"
+  },
+  "monitoring": {
+    "polling_interval_seconds": 30,
+    "max_markets_to_monitor": 10,
+    "orderbook_depth": 20,
+    "data_retention_days": 7
+  },
+  "strategies": {
+    "front_run": {
+      "min_order_size_usd": 1000,
+      "price_deviation_threshold": 0.01
+    },
+    "leaderboard_chaser": {
+      "min_profit_threshold": 1000,
+      "top_n_traders": 5
+    },
+    "mispricing_scanner": {
+      "volume_threshold": 10000,
+      "price_deviation_from_fair": 0.05
+    }
+  }
+}

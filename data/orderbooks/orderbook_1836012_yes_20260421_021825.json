@@ -1,0 +1,53 @@
+{
+  "market_question": "Will Udinese qualify for the League Phase of the 2026-27 UEFA Europa League?",
+  "market_id": "1836012",
+  "condition_id": "0xdb76565d55cde329972e9afb5423ba981d6b28dbdee028617bb35245610cb380",
+  "outcome": "yes",
+  "token_id": "18241359931616023420727204905693369326874391508068400050175442976800266283397",
+  "timestamp": "2026-04-21T02:18:25.489569",
+  "orderbook": {
+    "market": "0xdb76565d55cde329972e9afb5423ba981d6b28dbdee028617bb35245610cb380",
+    "asset_id": "18241359931616023420727204905693369326874391508068400050175442976800266283397",
+    "timestamp": "1776737758508",
+    "hash": "d1fbb1a0097446ca42d773eaca60c49b82ec98dd",
+    "bids": [],
+    "asks": [
+      {
+        "price": "0.99",
+        "size": "15.72"
+      },
+      {
+        "price": "0.98",
+        "size": "50"
+      },
+      {
+        "price": "0.97",
+        "size": "8.35"
+      },
+      {
+        "price": "0.94",
+        "size": "9"
+      },
+      {
+        "price": "0.9",
+        "size": "20"
+      },
+      {
+        "price": "0.89",
+        "size": "6.29"
+      },
+      {
+        "price": "0.2",
+        "size": "100"
+      },
+      {
+        "price": "0.19",
+        "size": "99.99"
+      }
+    ],
+    "min_order_size": "5",
+    "tick_size": "0.01",
+    "neg_risk": false,
+    "last_trade_price": "0.010"
+  }
+}

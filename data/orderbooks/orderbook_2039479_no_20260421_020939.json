@@ -1,0 +1,102 @@
+{
+  "market_question": "Bitcoin above 74,000 on April 20, 11PM ET?",
+  "market_id": "2039479",
+  "condition_id": "0x6f6e5f2b5ae704b0f7a2b98f7db1fddf55b7d5988e73de8f9a595e79ebf08a9f",
+  "outcome": "no",
+  "token_id": "32167850126640836778291567693357753563947740414159638955827576610437786600862",
+  "timestamp": "2026-04-21T02:09:39.330608",
+  "orderbook": {
+    "market": "0x6f6e5f2b5ae704b0f7a2b98f7db1fddf55b7d5988e73de8f9a595e79ebf08a9f",
+    "asset_id": "32167850126640836778291567693357753563947740414159638955827576610437786600862",
+    "timestamp": "1776737338715",
+    "hash": "63db3a13b8c02fd04b7d8948a5a7e15358c19045",
+    "bids": [
+      {
+        "price": "0.001",
+        "size": "150"
+      }
+    ],
+    "asks": [
+      {
+        "price": "0.999",
+        "size": "1155.1"
+      },
+      {
+        "price": "0.998",
+        "size": "22.41"
+      },
+      {
+        "price": "0.99",
+        "size": "1000"
+      },
+      {
+        "price": "0.989",
+        "size": "12.3"
+      },
+      {
+        "price": "0.98",
+        "size": "300"
+      },
+      {
+        "price": "0.97",
+        "size": "100"
+      },
+      {
+        "price": "0.96",
+        "size": "100"
+      },
+      {
+        "price": "0.959",
+        "size": "5.28"
+      },
+      {
+        "price": "0.95",
+        "size": "100"
+      },
+      {
+        "price": "0.94",
+        "size": "10"
+      },
+      {
+        "price": "0.93",
+        "size": "10"
+      },
+      {
+        "price": "0.92",
+        "size": "20"
+      },
+      {
+        "price": "0.91",
+        "size": "23"
+      },
+      {
+        "price": "0.9",
+        "size": "11.5"
+      },
+      {
+        "price": "0.899",
+        "size": "5.92"
+      },
+      {
+        "price": "0.045",
+        "size": "240"
+      },
+      {
+        "price": "0.044",
+        "size": "90.72"
+      },
+      {
+        "price": "0.03",
+        "size": "6.18"
+      },
+      {
+        "price": "0.029",
+        "size": "9.27"
+      }
+    ],
+    "min_order_size": "5",
+    "tick_size": "0.001",
+    "neg_risk": false,
+    "last_trade_price": "0.010"
+  }
+}

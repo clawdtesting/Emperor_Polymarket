@@ -1,0 +1,58 @@
+{
+  "market_question": "Dougaz vs. Jubb: Match O/U 23.5",
+  "market_id": "2019996",
+  "condition_id": "0x58cc307694bbe3b7be7fe1f66945b881c149413cb616fcc78998cf0f8adfaca3",
+  "outcome": "no",
+  "token_id": "17750395202142154972741743917695558986601089456477015249282211371552850497437",
+  "timestamp": "2026-04-21T01:24:46.782875",
+  "orderbook": {
+    "market": "0x58cc307694bbe3b7be7fe1f66945b881c149413cb616fcc78998cf0f8adfaca3",
+    "asset_id": "17750395202142154972741743917695558986601089456477015249282211371552850497437",
+    "timestamp": "1776734006447",
+    "hash": "e8d9f1e53c5ac5c40e3170d7754e2406753a6400",
+    "bids": [
+      {
+        "price": "0.001",
+        "size": "64"
+      },
+      {
+        "price": "0.002",
+        "size": "5.58"
+      },
+      {
+        "price": "0.003",
+        "size": "5.58"
+      }
+    ],
+    "asks": [
+      {
+        "price": "0.999",
+        "size": "1000"
+      },
+      {
+        "price": "0.998",
+        "size": "106.87"
+      },
+      {
+        "price": "0.94",
+        "size": "5.58"
+      },
+      {
+        "price": "0.939",
+        "size": "8.37"
+      },
+      {
+        "price": "0.921",
+        "size": "11.16"
+      },
+      {
+        "price": "0.92",
+        "size": "16.74"
+      }
+    ],
+    "min_order_size": "5",
+    "tick_size": "0.001",
+    "neg_risk": false,
+    "last_trade_price": "0.010"
+  }
+}

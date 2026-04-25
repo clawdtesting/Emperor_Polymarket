@@ -1,0 +1,41 @@
+{
+  "market_question": "Bitcoin above 74,400 on April 20, 10PM ET?",
+  "market_id": "2039291",
+  "condition_id": "0xbdd659c292d6db5eabeceb0437d520aceec78b5a4ab3da6ee0a73b74c68eea81",
+  "outcome": "yes",
+  "token_id": "31521069555483491719275530627796433129878984129672568611524486708518037989049",
+  "timestamp": "2026-04-21T01:57:04.832498",
+  "orderbook": {
+    "market": "0xbdd659c292d6db5eabeceb0437d520aceec78b5a4ab3da6ee0a73b74c68eea81",
+    "asset_id": "31521069555483491719275530627796433129878984129672568611524486708518037989049",
+    "timestamp": "1776736454001",
+    "hash": "b54293d85d3f635fcbd9e41794a7715487462c7d",
+    "bids": [
+      {
+        "price": "0.001",
+        "size": "1150"
+      },
+      {
+        "price": "0.002",
+        "size": "18.16"
+      },
+      {
+        "price": "0.11",
+        "size": "54.55"
+      },
+      {
+        "price": "0.111",
+        "size": "81.82"
+      },
+      {
+        "price": "0.99",
+        "size": "20"
+      }
+    ],
+    "asks": [],
+    "min_order_size": "5",
+    "tick_size": "0.001",
+    "neg_risk": false,
+    "last_trade_price": "0.999"
+  }
+}

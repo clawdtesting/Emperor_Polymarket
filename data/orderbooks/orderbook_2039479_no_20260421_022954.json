@@ -1,0 +1,86 @@
+{
+  "market_question": "Bitcoin above 74,000 on April 20, 11PM ET?",
+  "market_id": "2039479",
+  "condition_id": "0x6f6e5f2b5ae704b0f7a2b98f7db1fddf55b7d5988e73de8f9a595e79ebf08a9f",
+  "outcome": "no",
+  "token_id": "32167850126640836778291567693357753563947740414159638955827576610437786600862",
+  "timestamp": "2026-04-21T02:29:54.527851",
+  "orderbook": {
+    "market": "0x6f6e5f2b5ae704b0f7a2b98f7db1fddf55b7d5988e73de8f9a595e79ebf08a9f",
+    "asset_id": "32167850126640836778291567693357753563947740414159638955827576610437786600862",
+    "timestamp": "1776738586000",
+    "hash": "163e66dfec2807d1f3281109e3bbd7ee75d45a96",
+    "bids": [
+      {
+        "price": "0.001",
+        "size": "150"
+      }
+    ],
+    "asks": [
+      {
+        "price": "0.999",
+        "size": "1155.1"
+      },
+      {
+        "price": "0.998",
+        "size": "22.41"
+      },
+      {
+        "price": "0.99",
+        "size": "1000"
+      },
+      {
+        "price": "0.989",
+        "size": "8.4"
+      },
+      {
+        "price": "0.98",
+        "size": "300"
+      },
+      {
+        "price": "0.97",
+        "size": "100"
+      },
+      {
+        "price": "0.969",
+        "size": "7.35"
+      },
+      {
+        "price": "0.96",
+        "size": "100"
+      },
+      {
+        "price": "0.95",
+        "size": "100"
+      },
+      {
+        "price": "0.94",
+        "size": "10"
+      },
+      {
+        "price": "0.929",
+        "size": "8.87"
+      },
+      {
+        "price": "0.045",
+        "size": "240"
+      },
+      {
+        "price": "0.044",
+        "size": "90.72"
+      },
+      {
+        "price": "0.03",
+        "size": "6.18"
+      },
+      {
+        "price": "0.029",
+        "size": "9.27"
+      }
+    ],
+    "min_order_size": "5",
+    "tick_size": "0.001",
+    "neg_risk": false,
+    "last_trade_price": "0.010"
+  }
+}

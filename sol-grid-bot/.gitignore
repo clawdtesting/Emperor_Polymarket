@@ -1,0 +1,16 @@
+# Secrets and local state
+.env
+config/config.yaml
+data/*.sqlite3
+data/*.sqlite3-*
+logs/
+KILL_SWITCH
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+.coverage

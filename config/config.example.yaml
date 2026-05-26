@@ -1,0 +1,115 @@
+# ============================================================
+# SOL Accumulation Grid Bot - strategy configuration
+# Copy to config/config.yaml and adjust. Values here are the
+# defaults seeded from your setup answers:
+#   starting SOL = 2, starting USDT = 200, 50% core lock, low risk.
+# ============================================================
+
+symbol: "SOL/USDC:USDC"   # Hyperliquid spot is quoted in USDC. See README.
+# For paper/backtest you may also use "SOL/USDT" if your data source uses it.
+
+# ---- Starting inventory (used by paper/backtest and as a sanity
+#      check against the live exchange balance on startup) -----
+starting_sol: 2.0
+starting_usdt: 200.0
+
+# ---- Core vs grid capital split ----------------------------
+# 50% of SOL is locked as untouchable core; the rest is grid inventory.
+core_sol_fraction: 0.50        # locked, never traded
+grid_capital_percentage: 0.30  # fraction of USDT deployed into the grid
+# CORE_SOL_MINIMUM is derived as starting_sol * core_sol_fraction
+# unless explicitly overridden below.
+core_sol_minimum: null         # null = auto-derive; or set an absolute SOL floor
+
+# ---- Grid design -------------------------------------------
+grid:
+  lower_price: 80.0
+  upper_price: 96.0
+  count: 12
+  spacing_mode: "arithmetic"   # arithmetic | geometric | atr
+  atr_spacing_multiplier: 0.75 # used when spacing_mode == atr
+  dynamic: false               # false = static; true = auto recalc range
+  range_recalc_interval_sec: 3600
+  range_lookback_candles: 200
+  range_recalc_percentile: 0.05  # low/high percentiles for dynamic range
+
+# ---- Order sizing ------------------------------------------
+order:
+  size_mode: "fixed_usdt"      # fixed_usdt | fixed_sol | portfolio_percent
+  fixed_usdt: 8.0
+  fixed_sol: 0.1
+  portfolio_percent: 0.04      # used when size_mode == portfolio_percent
+  min_order_size_usdt: 5.0     # exchange minimum notional guard
+  max_active_orders: 12
+
+# ---- Accumulation behaviour --------------------------------
+accumulation:
+  accumulation_mode: true
+  profit_conversion_mode: "partial_to_SOL"  # none | partial_to_SOL | full_to_SOL
+  profit_conversion_percent: 50
+  reduce_sells_in_uptrend: true
+  sell_reduction_factor: 0.5   # multiply sell size by this during bullish regime
+
+# ---- Regime detection --------------------------------------
+regime:
+  ema_fast: 20
+  ema_mid: 50
+  ema_slow: 200
+  atr_period: 14
+  adx_period: 14
+  adx_range_max: 25.0          # ADX below this => ranging
+  max_price_dist_ema50_pct: 4.0  # |price-EMA50|/EMA50 must be below this to trade
+  atr_high_vol_pct: 6.0        # ATR/price above this => HIGH_VOLATILITY
+  volume_spike_multiplier: 3.0 # vol > avg*mult => spike
+  breakout_confirm_percent: 1.0  # % beyond range to confirm a breakout
+  candle_timeframe: "1h"
+  candle_lookback: 300
+
+# ---- Breakout / breakdown handling -------------------------
+breakout:
+  upward_breakout_action: "reduce_sells"     # pause | shift_grid_up | reduce_sells
+  downward_breakdown_action: "reduce_buys"   # pause | reduce_buys | emergency_stop
+
+# ---- Risk management (LOW profile defaults) ----------------
+risk:
+  profile: "low"               # low | medium | high (selectable)
+  max_drawdown_percent: 8.0
+  max_daily_loss_percent: 3.0
+  max_open_orders: 12
+  max_sol_exposure_percent: 50.0   # grid SOL cannot exceed this % of total SOL
+  max_usdt_exposure_percent: 30.0  # cannot deploy more than this % of USDT
+  max_usdt_deployment: 60.0        # absolute cap on deployed USDT
+  max_position_sol: 1.0            # absolute cap on grid SOL inventory
+  min_free_usdt_reserve: 20.0
+  max_order_retries: 3
+  api_stale_data_timeout_sec: 60
+  max_spread_percent: 0.5
+  price_gap_percent: 10.0          # single-tick jump that trips the breaker
+  circuit_breaker_enabled: true
+
+# ---- Risk profile overrides (applied when risk.profile selected) ----
+risk_profiles:
+  low:
+    max_drawdown_percent: 8.0
+    max_daily_loss_percent: 3.0
+    max_spread_percent: 0.5
+  medium:
+    max_drawdown_percent: 15.0
+    max_daily_loss_percent: 6.0
+    max_spread_percent: 0.8
+  high:
+    max_drawdown_percent: 25.0
+    max_daily_loss_percent: 10.0
+    max_spread_percent: 1.5
+
+# ---- Engine loop -------------------------------------------
+engine:
+  poll_interval_sec: 15
+  rebalance_interval_sec: 300
+  reconcile_on_startup: true
+
+# ---- Backtest ----------------------------------------------
+backtest:
+  data_file: "data/sol_ohlcv.csv"   # CSV: timestamp,open,high,low,close,volume
+  timeframe: "1h"
+  fee_rate: 0.00035                 # taker fee approximation

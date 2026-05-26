@@ -1,0 +1,15 @@
+services:
+  sol-grid-bot:
+    build: .
+    container_name: sol-grid-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: ["paper"]   # change to ["live"] only after testing; needs LIVE_TRADING=true
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # Mount the kill switch dir so you can stop the bot from the host.
+      - ./:/app/host
+    stop_grace_period: 30s

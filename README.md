@@ -185,6 +185,11 @@ Sign in with `CONSOLE_PASSWORD` and you get:
 - **Open orders** table and a **logs** tail
 - **Action buttons** — Pause, Resume, Convert profit → SOL, Cancel all orders,
   **Emergency stop** (kill switch), Clear kill switch
+- **Price chart** — candlesticks for a selectable token (5 by default) with a
+  timeframe selector (5m/15m/1h/4h/1d). Entry (buy) and exit (sell) markers are
+  overlaid from the bot's fills — these appear only when the selected token is
+  the one the bot trades (`symbol`), since that is where fills exist. Configure
+  the token list and timeframes under `console:` in `config.yaml`.
 
 Actions are applied safely at cycle boundaries by the loop thread, so the
 console never races the trader. API endpoints (`/api/status`, `/api/logs`,

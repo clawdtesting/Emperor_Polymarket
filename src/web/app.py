@@ -9,6 +9,7 @@ import functools
 import hmac
 import os
 import secrets
+import threading
 from collections import deque
 from pathlib import Path
 
@@ -16,6 +17,8 @@ from flask import (Flask, Response, jsonify, redirect, render_template_string,
                    request, session, url_for)
 
 from ..config import load_config
+from ..exchange import Exchange, ExchangeError
+from ..storage.db import Database
 from .controller import BotController
 
 LOG_FILE = os.getenv("LOG_FILE", "logs/bot.log")
@@ -63,6 +66,22 @@ def create_app(project_root: Path | None = None) -> Flask:
     controller.start()
     app.config["controller"] = controller
 
+    console = cfg.console
+    # Read-only DB connection for the dashboard (separate from the bot loop's).
+    read_db = Database(cfg.env.db_path)
+    # Dedicated read-only market-data client for charts so we never touch the
+    # trading loop's ccxt client concurrently. Created lazily on first use.
+    chart_ex: dict[str, object] = {"ex": None}
+    chart_lock = threading.Lock()
+
+    def _chart_exchange() -> Exchange:
+        with chart_lock:
+            if chart_ex["ex"] is None:
+                ex = Exchange(cfg, trading_enabled=False)
+                ex.load_markets()
+                chart_ex["ex"] = ex
+            return chart_ex["ex"]  # type: ignore[return-value]
+
     # ---- auth ----------------------------------------------
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -97,6 +116,53 @@ def create_app(project_root: Path | None = None) -> Flask:
     @require_auth
     def api_logs():
         return jsonify({"lines": _tail(LOG_FILE, 200)})
+
+    # ---- chart data ----------------------------------------
+    @app.route("/api/tokens")
+    @require_auth
+    def api_tokens():
+        return jsonify({
+            "tokens": console["chart_tokens"],
+            "timeframes": console["chart_timeframes"],
+            "default_token": console["default_token"],
+            "default_timeframe": console["default_timeframe"],
+            "traded": cfg.symbol,
+        })
+
+    @app.route("/api/candles")
+    @require_auth
+    def api_candles():
+        symbol = request.args.get("symbol", console["default_token"])
+        timeframe = request.args.get("timeframe", console["default_timeframe"])
+        if symbol not in console["chart_tokens"]:
+            return jsonify({"error": "symbol not allowed"}), 400
+        if timeframe not in console["chart_timeframes"]:
+            return jsonify({"error": "timeframe not allowed"}), 400
+        limit = int(console.get("chart_candles", 300))
+        try:
+            rows = _chart_exchange().fetch_ohlcv_symbol(symbol, timeframe, limit)
+        except ExchangeError as exc:
+            return jsonify({"error": str(exc)}), 502
+        except Exception as exc:  # network/exchange hiccups shouldn't 500 the UI
+            return jsonify({"error": f"market data unavailable: {exc}"}), 502
+        candles = [
+            {"time": int(r[0] // 1000), "open": r[1], "high": r[2],
+             "low": r[3], "close": r[4]}
+            for r in rows
+        ]
+        return jsonify({"symbol": symbol, "timeframe": timeframe,
+                        "candles": candles})
+
+    @app.route("/api/fills")
+    @require_auth
+    def api_fills():
+        # Entry/exit markers only exist for the traded symbol.
+        fills = [
+            {"time": int(row["ts"]), "side": row["side"], "price": row["price"],
+             "amount": row["amount"]}
+            for row in read_db.fills()
+        ]
+        return jsonify({"symbol": cfg.symbol, "fills": fills})
 
     @app.route("/api/action/<name>", methods=["POST"])
     @require_auth
@@ -174,7 +240,21 @@ DASHBOARD_HTML = """
   max-height:280px;overflow:auto;font-size:12px;white-space:pre-wrap}
  .section{font-size:14px;margin:18px 0 8px;color:#8b949e}
  a{color:#58a6ff}
-</style></head><body>
+ .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+ select{background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;
+  padding:7px 10px;font-weight:600}
+ .tf{display:flex;gap:4px}
+ .tf button{padding:6px 10px;background:#21262d}
+ .tf button.active{background:#1f6feb}
+ #chart{width:100%;height:360px;background:#161b22;border:1px solid #30363d;
+  border-radius:10px}
+ .legend{font-size:12px;color:#8b949e;margin:6px 0}
+ .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 4px 0 10px}
+ .buy{background:#3fb950}.sell{background:#f85149}
+ .note{color:#8b949e;font-size:12px}
+</style>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+</head><body>
  <h1>SOL Accumulation Grid Bot <span id="mode" class="pill ok">{{ mode }}</span></h1>
  <div class="sub">Last update: <span id="updated">-</span> ·
   <a href="/logout">log out</a></div>
@@ -206,6 +286,16 @@ DASHBOARD_HTML = """
   <div class="card"><div class="label">State</div>
    <div class="val"><span id="state" class="pill ok">-</span></div></div>
  </div>
+
+ <div class="section">Chart</div>
+ <div class="toolbar">
+  <select id="token"></select>
+  <div class="tf" id="tf"></div>
+  <span class="legend"><span class="dot buy"></span>entry (buy)
+   <span class="dot sell"></span>exit (sell)</span>
+ </div>
+ <div id="chart"></div>
+ <div class="legend" id="chartnote"></div>
 
  <div class="section">Open orders (<span id="oo_count">0</span>)</div>
  <table><thead><tr><th>Side</th><th>Price</th><th>Amount (SOL)</th><th>Level</th>
@@ -258,5 +348,88 @@ async function refresh(){
  }catch(e){}
 }
 refresh();setInterval(refresh,5000);
+
+// ---------- chart ----------
+let chart, series, tradedSymbol=null;
+let curToken=null, curTf=null;
+
+function initChart(){
+ const el=document.getElementById('chart');
+ chart=LightweightCharts.createChart(el,{
+  layout:{background:{color:'#161b22'},textColor:'#c9d1d9'},
+  grid:{vertLines:{color:'#21262d'},horzLines:{color:'#21262d'}},
+  rightPriceScale:{borderColor:'#30363d'},
+  timeScale:{borderColor:'#30363d',timeVisible:true,secondsVisible:false},
+  crosshair:{mode:0},autoSize:true,
+ });
+ series=chart.addCandlestickSeries({
+  upColor:'#3fb950',downColor:'#f85149',borderVisible:false,
+  wickUpColor:'#3fb950',wickDownColor:'#f85149',
+ });
+ window.addEventListener('resize',()=>chart.timeScale().fitContent());
+}
+
+function snap(t,candles){ // snap a fill time to its candle bucket time
+ let best=candles.length?candles[0].time:t;
+ for(const c of candles){ if(c.time<=t) best=c.time; else break; }
+ return best;
+}
+
+async function loadMarkers(candles){
+ if(curToken!==tradedSymbol){series.setMarkers([]);
+  document.getElementById('chartnote').textContent=
+   'Entry/exit markers show only for the traded token ('+tradedSymbol+').';
+  return;}
+ document.getElementById('chartnote').textContent='';
+ try{
+  const f=await (await fetch('/api/fills')).json();
+  const min=candles.length?candles[0].time:0;
+  const mk=(f.fills||[]).filter(x=>x.time>=min).map(x=>({
+   time:snap(x.time,candles),
+   position:x.side==='buy'?'belowBar':'aboveBar',
+   color:x.side==='buy'?'#3fb950':'#f85149',
+   shape:x.side==='buy'?'arrowUp':'arrowDown',
+   text:(x.side==='buy'?'B ':'S ')+Number(x.price).toFixed(2),
+  }));
+  mk.sort((a,b)=>a.time-b.time);
+  series.setMarkers(mk);
+ }catch(e){series.setMarkers([]);}
+}
+
+async function loadChart(){
+ if(!curToken||!curTf)return;
+ try{
+  const url='/api/candles?symbol='+encodeURIComponent(curToken)+'&timeframe='+curTf;
+  const d=await (await fetch(url)).json();
+  if(d.error){document.getElementById('chartnote').textContent='Chart: '+d.error;return;}
+  const candles=d.candles||[];
+  series.setData(candles);
+  chart.timeScale().fitContent();
+  await loadMarkers(candles);
+ }catch(e){document.getElementById('chartnote').textContent='Chart unavailable.';}
+}
+
+async function initTokens(){
+ const t=await (await fetch('/api/tokens')).json();
+ tradedSymbol=t.traded;
+ curToken=t.default_token; curTf=t.default_timeframe;
+ const sel=document.getElementById('token');
+ sel.innerHTML=t.tokens.map(x=>`<option value="${x}" ${x===curToken?'selected':''}>`+
+  `${x}${x===tradedSymbol?' (trading)':''}</option>`).join('');
+ sel.onchange=()=>{curToken=sel.value;loadChart();};
+ const tf=document.getElementById('tf');
+ tf.innerHTML=t.timeframes.map(x=>`<button data-tf="${x}" `+
+  `class="${x===curTf?'active':''}">${x}</button>`).join('');
+ tf.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+  curTf=b.dataset.tf;
+  tf.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  loadChart();
+ });
+ initChart();
+ loadChart();
+ setInterval(loadChart,30000);
+}
+initTokens();
 </script></body></html>
 """

@@ -116,6 +116,18 @@ class Config:
     def backtest(self) -> dict[str, Any]:
         return self.section("backtest")
 
+    @property
+    def console(self) -> dict[str, Any]:
+        defaults: dict[str, Any] = {
+            "chart_tokens": [self.symbol],
+            "chart_timeframes": ["5m", "15m", "1h", "4h", "1d"],
+            "default_token": self.symbol,
+            "default_timeframe": "1h",
+            "chart_candles": 300,
+        }
+        defaults.update(self.section("console"))
+        return defaults
+
 
 def load_env(base_dir: Optional[Path] = None) -> EnvConfig:
     base = base_dir or Path.cwd()

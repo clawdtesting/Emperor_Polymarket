@@ -113,3 +113,20 @@ backtest:
   data_file: "data/sol_ohlcv.csv"   # CSV: timestamp,open,high,low,close,volume
   timeframe: "1h"
   fee_rate: 0.00035                 # taker fee approximation
+
+# ---- Web console chart -------------------------------------
+console:
+  # Tokens you can pick from in the dashboard chart (must be symbols the
+  # exchange exposes). The bot only TRADES `symbol` above; entry/exit markers
+  # appear only when the selected chart token matches it.
+  chart_tokens:
+    - "SOL/USDC:USDC"
+    - "BTC/USDC:USDC"
+    - "ETH/USDC:USDC"
+    - "HYPE/USDC:USDC"
+    - "DOGE/USDC:USDC"
+  chart_timeframes: ["5m", "15m", "1h", "4h", "1d"]
+  default_token: "SOL/USDC:USDC"
+  default_timeframe: "1h"
+  chart_candles: 300
+

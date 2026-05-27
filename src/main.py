@@ -267,6 +267,9 @@ class Bot:
             "grid_range": (f"{self._active_range[0]:.2f}-{self._active_range[1]:.2f}"
                            if self._active_range else
                            f"{self.cfg.grid['lower_price']}-{self.cfg.grid['upper_price']}"),
+            "active_range": (list(self._active_range) if self._active_range
+                             else [float(self.cfg.grid["lower_price"]),
+                                   float(self.cfg.grid["upper_price"])]),
             "metrics": m.as_dict(),
             "open_orders": [
                 {"side": o.side.value, "price": o.price, "amount": o.amount,

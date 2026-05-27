@@ -189,7 +189,10 @@ Sign in with `CONSOLE_PASSWORD` and you get:
   timeframe selector (5m/15m/1h/4h/1d). Entry (buy) and exit (sell) markers are
   overlaid from the bot's fills — these appear only when the selected token is
   the one the bot trades (`symbol`), since that is where fills exist. Configure
-  the token list and timeframes under `console:` in `config.yaml`.
+  the token list and timeframes under `console:` in `config.yaml`. A **Grid
+  orders** toggle overlays the open buy/sell limit orders as dashed price lines
+  (green = buy, red = sell) plus the active grid range, so you can see exactly
+  where the grid is resting relative to price.
 
 Actions are applied safely at cycle boundaries by the loop thread, so the
 console never races the trader. API endpoints (`/api/status`, `/api/logs`,

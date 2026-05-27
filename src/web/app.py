@@ -246,6 +246,7 @@ DASHBOARD_HTML = """
  .tf{display:flex;gap:4px}
  .tf button{padding:6px 10px;background:#21262d}
  .tf button.active{background:#1f6feb}
+ #gridtoggle.active{background:#1f6feb}
  #chart{width:100%;height:360px;background:#161b22;border:1px solid #30363d;
   border-radius:10px}
  .legend{font-size:12px;color:#8b949e;margin:6px 0}
@@ -291,8 +292,10 @@ DASHBOARD_HTML = """
  <div class="toolbar">
   <select id="token"></select>
   <div class="tf" id="tf"></div>
+  <button id="gridtoggle" class="active" onclick="toggleGrid()">Grid orders: on</button>
   <span class="legend"><span class="dot buy"></span>entry (buy)
-   <span class="dot sell"></span>exit (sell)</span>
+   <span class="dot sell"></span>exit (sell)
+   &nbsp;|&nbsp; dashed lines = open grid orders</span>
  </div>
  <div id="chart"></div>
  <div class="legend" id="chartnote"></div>
@@ -338,6 +341,8 @@ async function refresh(){
   document.getElementById('orders').innerHTML=oo.map(o=>
    `<tr><td>${o.side}</td><td>${fmt(o.price,4)}</td>`+
    `<td>${fmt(o.amount,4)}</td><td>${o.grid_level??'-'}</td></tr>`).join('');
+  latestOrders=oo; latestRange=s.active_range||null;
+  drawGrid();
   document.getElementById('updated').textContent=new Date().toLocaleTimeString();
  }catch(e){/* transient */}
  try{
@@ -352,6 +357,43 @@ refresh();setInterval(refresh,5000);
 // ---------- chart ----------
 let chart, series, tradedSymbol=null;
 let curToken=null, curTf=null;
+let gridLines=[], showGrid=true, latestOrders=[], latestRange=null;
+
+function toggleGrid(){
+ showGrid=!showGrid;
+ const b=document.getElementById('gridtoggle');
+ b.textContent='Grid orders: '+(showGrid?'on':'off');
+ b.classList.toggle('active',showGrid);
+ drawGrid();
+}
+
+function drawGrid(){
+ if(!series)return;
+ gridLines.forEach(l=>{try{series.removePriceLine(l);}catch(e){}});
+ gridLines=[];
+ // Grid orders only exist for the traded token.
+ if(!showGrid||curToken!==tradedSymbol)return;
+ (latestOrders||[]).forEach(o=>{
+  const buy=o.side==='buy';
+  gridLines.push(series.createPriceLine({
+   price:Number(o.price),
+   color:buy?'#3fb950':'#f85149',
+   lineWidth:1,
+   lineStyle:LightweightCharts.LineStyle.Dashed,
+   axisLabelVisible:true,
+   title:(buy?'BUY ':'SELL ')+Number(o.amount).toFixed(3),
+  }));
+ });
+ // Active range bounds as faint solid lines.
+ if(latestRange&&latestRange.length===2){
+  [['range lo',latestRange[0]],['range hi',latestRange[1]]].forEach(([t,p])=>{
+   gridLines.push(series.createPriceLine({
+    price:Number(p),color:'#8b949e',lineWidth:1,
+    lineStyle:LightweightCharts.LineStyle.Dotted,axisLabelVisible:false,title:t,
+   }));
+  });
+ }
+}
 
 function initChart(){
  const el=document.getElementById('chart');
@@ -406,6 +448,7 @@ async function loadChart(){
   series.setData(candles);
   chart.timeScale().fitContent();
   await loadMarkers(candles);
+  drawGrid();
  }catch(e){document.getElementById('chartnote').textContent='Chart unavailable.';}
 }
 

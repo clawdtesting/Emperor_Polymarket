@@ -57,7 +57,10 @@ class Database:
     def __init__(self, path: str) -> None:
         self.path = path
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(path)
+        # check_same_thread=False: the web console constructs the bot in one
+        # thread and runs its loop in another. Writes stay effectively
+        # single-threaded (the bot loop owns them).
+        self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
         self.conn.commit()

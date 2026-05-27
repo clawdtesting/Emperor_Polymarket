@@ -124,6 +124,20 @@ def cmd_cancel_all(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_web(_args: argparse.Namespace) -> int:
+    import os
+    from .web.app import create_app
+    setup_logging()
+    if not os.getenv("CONSOLE_PASSWORD"):
+        print("Warning: CONSOLE_PASSWORD is not set; logins will be refused "
+              "until you set it.")
+    app = create_app(_project_root())
+    port = int(os.getenv("PORT", "8000"))
+    print(f"Web console on http://0.0.0.0:{port}  (Ctrl+C to stop)")
+    app.run(host="0.0.0.0", port=port)
+    return 0
+
+
 def cmd_emergency_stop(_args: argparse.Namespace) -> int:
     cfg, db = _read_only_context()
     Path(cfg.env.kill_switch_file).write_text("STOP\n", encoding="utf-8")
@@ -146,6 +160,7 @@ def build_parser() -> argparse.ArgumentParser:
         "report": cmd_report,
         "cancel-all": cmd_cancel_all,
         "emergency-stop": cmd_emergency_stop,
+        "web": cmd_web,
     }
     for name, fn in commands.items():
         sp = sub.add_parser(name, help=fn.__doc__ or name)

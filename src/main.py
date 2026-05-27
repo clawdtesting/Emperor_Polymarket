@@ -50,6 +50,9 @@ class Bot:
         self.broker = None
         self.om: Optional[OrderManager] = None
         self._last_rebalance = 0.0
+        self._grid_range_cache: Optional[tuple[float, float]] = None
+        self._grid_range_ts = 0.0
+        self._active_range: Optional[tuple[float, float]] = None
 
         # Thread-safe control surface for the web console.
         self._cmd_lock = threading.Lock()
@@ -261,7 +264,9 @@ class Bot:
             "halt_reason": self.risk.state.reason,
             "regime": regime,
             "regime_detail": regime_detail,
-            "grid_range": f"{self.cfg.grid['lower_price']}-{self.cfg.grid['upper_price']}",
+            "grid_range": (f"{self._active_range[0]:.2f}-{self._active_range[1]:.2f}"
+                           if self._active_range else
+                           f"{self.cfg.grid['lower_price']}-{self.cfg.grid['upper_price']}"),
             "metrics": m.as_dict(),
             "open_orders": [
                 {"side": o.side.value, "price": o.price, "amount": o.amount,
@@ -285,10 +290,41 @@ class Bot:
             log.info(msg)
             self.notifier.send(msg)
 
+    def _grid_range(self, candles, price: float) -> tuple[float, float]:
+        """Active grid range, recomputed on an interval to avoid order churn."""
+        g = self.cfg.grid
+        if not g.get("dynamic"):
+            return float(g["lower_price"]), float(g["upper_price"])
+        interval = float(g.get("range_recalc_interval_sec", 900))
+        now = time.time()
+        if self._grid_range_cache is None or now - self._grid_range_ts >= interval:
+            new_range = grid.compute_range(self.cfg, candles, price)
+            if new_range != self._grid_range_cache:
+                log.info("Active grid range -> %.4f to %.4f (price %.4f)",
+                         new_range[0], new_range[1], price)
+                self.db.audit("INFO", "grid",
+                              f"range {new_range[0]:.4f}-{new_range[1]:.4f} @ {price:.4f}")
+            self._grid_range_cache = new_range
+            self._grid_range_ts = now
+        return self._grid_range_cache
+
     def _manage_grid(self, snapshot: MarketSnapshot, candles, regime: Regime,
                      sol: float, usdt: float, port_value: float) -> None:
         assert self.om
-        spec = grid.build_levels(self.cfg, snapshot.mid, candles)
+        lower, upper = self._grid_range(candles, snapshot.mid)
+        self._active_range = (lower, upper)
+
+        # Cancel any resting orders that have fallen outside the live range
+        # (e.g. far-below buys left over after the market moved up).
+        tol = (upper - lower) * 0.01
+        for order in list(self.om.open_orders):
+            if order.price < lower - tol or order.price > upper + tol:
+                log.info("cancel out-of-range %s @ %.4f (range %.4f-%.4f)",
+                         order.side.value, order.price, lower, upper)
+                self.om.cancel(order)
+
+        spec = grid.build_levels(self.cfg, snapshot.mid, candles,
+                                 range_override=(lower, upper))
         max_active = int(self.cfg.order.get("max_active_orders", 12))
         for level in spec.levels:
             if len(self.om.open_orders) >= max_active:

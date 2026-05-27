@@ -23,15 +23,20 @@ core_sol_minimum: null         # null = auto-derive; or set an absolute SOL floo
 
 # ---- Grid design -------------------------------------------
 grid:
+  # lower/upper are only used as a fallback when dynamic is false. With dynamic
+  # range detection on (recommended), the bot auto-detects the recent trading
+  # range from candles and centers the grid on the current price.
   lower_price: 80.0
   upper_price: 96.0
   count: 12
   spacing_mode: "arithmetic"   # arithmetic | geometric | atr
   atr_spacing_multiplier: 0.75 # used when spacing_mode == atr
-  dynamic: false               # false = static; true = auto recalc range
-  range_recalc_interval_sec: 3600
-  range_lookback_candles: 200
-  range_recalc_percentile: 0.05  # low/high percentiles for dynamic range
+  dynamic: true                # auto-detect range and play inside it
+  range_recalc_interval_sec: 900   # how often to re-detect the range (15 min)
+  range_lookback_candles: 120      # candles used to measure the range
+  range_recalc_percentile: 0.1     # 10th/90th pctile of lows/highs (ignores wicks)
+  range_price_margin: 0.005        # always include current price +/- 0.5%
+  range_min_width_pct: 3.0         # minimum grid width as % of price
 
 # ---- Order sizing ------------------------------------------
 order:

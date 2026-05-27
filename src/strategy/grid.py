@@ -23,15 +23,18 @@ class GridSpec:
 
 
 def build_levels(cfg: Config, ref_price: float,
-                 candles: Optional[Sequence[Candle]] = None) -> GridSpec:
+                 candles: Optional[Sequence[Candle]] = None,
+                 range_override: Optional[tuple[float, float]] = None) -> GridSpec:
     g = cfg.grid
-    lower = float(g["lower_price"])
-    upper = float(g["upper_price"])
     count = int(g["count"])
     mode = g["spacing_mode"]
 
-    if g.get("dynamic") and candles:
-        lower, upper = _dynamic_range(cfg, candles)
+    if range_override is not None:
+        lower, upper = range_override
+    elif g.get("dynamic") and candles:
+        lower, upper = compute_range(cfg, candles, ref_price)
+    else:
+        lower, upper = float(g["lower_price"]), float(g["upper_price"])
 
     prices = _spaced_prices(lower, upper, count, mode, cfg, candles)
     levels: list[GridLevel] = []
@@ -41,18 +44,42 @@ def build_levels(cfg: Config, ref_price: float,
     return GridSpec(lower=lower, upper=upper, levels=levels)
 
 
-def _dynamic_range(cfg: Config, candles: Sequence[Candle]) -> tuple[float, float]:
+def compute_range(cfg: Config, candles: Sequence[Candle],
+                  price: float) -> tuple[float, float]:
+    """Detect the recent trading range and center it on the current price.
+
+    Uses percentile bands of recent highs/lows (robust to wicks), then ensures
+    the band actually contains ``price`` and is at least a minimum width so the
+    grid sits where the market is currently trading."""
     g = cfg.grid
-    lookback = int(g.get("range_lookback_candles", 200))
+    lookback = int(g.get("range_lookback_candles", 120))
     window = candles[-lookback:] if len(candles) >= lookback else candles
-    lows = [c.low for c in window]
-    highs = [c.high for c in window]
-    q = float(g.get("range_recalc_percentile", 0.05))
-    lower = percentile(lows, q)
-    upper = percentile(highs, 1 - q)
-    if lower >= upper:  # fallback to static
+    if not window:
         return float(g["lower_price"]), float(g["upper_price"])
-    return lower, upper
+
+    q = float(g.get("range_recalc_percentile", 0.1))
+    lower = percentile([c.low for c in window], q)
+    upper = percentile([c.high for c in window], 1 - q)
+    if lower >= upper:
+        lower, upper = price * 0.97, price * 1.03
+
+    # Always include the current price (plus a small margin) inside the grid.
+    margin = float(g.get("range_price_margin", 0.005))
+    lower = min(lower, price * (1 - margin))
+    upper = max(upper, price * (1 + margin))
+
+    # Enforce a minimum total width so the grid isn't tighter than the spread.
+    min_width_pct = float(g.get("range_min_width_pct", 3.0)) / 100.0
+    if (upper - lower) / price < min_width_pct:
+        half = price * min_width_pct / 2.0
+        lower, upper = price - half, price + half
+    return round(lower, 4), round(upper, 4)
+
+
+def _dynamic_range(cfg: Config, candles: Sequence[Candle]) -> tuple[float, float]:
+    # Backwards-compatible wrapper; prefers the current last close as price.
+    price = candles[-1].close if candles else 0.0
+    return compute_range(cfg, candles, price)
 
 
 def _spaced_prices(lower: float, upper: float, count: int, mode: str,

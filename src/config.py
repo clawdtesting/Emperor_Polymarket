@@ -152,10 +152,17 @@ def load_config(base_dir: Optional[Path] = None) -> Config:
     env = load_env(base)
     cfg_path = base / env.config_file
     if not cfg_path.exists():
-        raise ConfigError(
-            f"Config file not found: {cfg_path}. "
-            "Run `python bot.py init` or copy config/config.example.yaml."
-        )
+        # Fall back to the committed example so containers/deploys work without
+        # a manual `init` step. Secrets never live here (those are in env vars),
+        # so the example is a safe default; override by mounting config.yaml.
+        example = cfg_path.parent / "config.example.yaml"
+        if example.exists():
+            cfg_path = example
+        else:
+            raise ConfigError(
+                f"Config file not found: {cfg_path}. "
+                "Run `python bot.py init` or copy config/config.example.yaml."
+            )
     with open(cfg_path, "r", encoding="utf-8") as fh:
         raw = yaml.safe_load(fh) or {}
     _apply_risk_profile(raw)

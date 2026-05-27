@@ -5,11 +5,12 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    command: ["paper"]   # change to ["live"] only after testing; needs LIVE_TRADING=true
+    # Default command (from the Dockerfile) runs the web console + trading loop.
+    # Set RUN_MODE=paper|live and CONSOLE_PASSWORD in .env. Open http://localhost:8000
+    ports:
+      - "8000:8000"
     volumes:
       - ./config:/app/config
       - ./data:/app/data
       - ./logs:/app/logs
-      # Mount the kill switch dir so you can stop the bot from the host.
-      - ./:/app/host
     stop_grace_period: 30s

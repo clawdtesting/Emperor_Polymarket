@@ -134,7 +134,7 @@ def cmd_web(_args: argparse.Namespace) -> int:
     app = create_app(_project_root())
     port = int(os.getenv("PORT", "8000"))
     print(f"Web console on http://0.0.0.0:{port}  (Ctrl+C to stop)")
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, threaded=True)
     return 0
 
 

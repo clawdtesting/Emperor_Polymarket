@@ -191,6 +191,21 @@ class Bot:
         self.notifier.send("SOL grid bot stopped.")
         self.db.close()
 
+    # ---- balance helpers -----------------------------------
+    def _free_balances(self) -> tuple[float, float]:
+        """Spendable (unreserved) SOL/USDT — used for order sizing checks."""
+        if self.mode == "live":
+            return self.exchange.fetch_balances()
+        return self.broker.balances()
+
+    def _equity_balances(self) -> tuple[float, float]:
+        """Total SOL/USDT including funds locked in open orders — used for
+        equity, drawdown, and daily-loss calculations. Reserving cash into an
+        open buy order must NOT register as a loss."""
+        if self.mode == "live":
+            return self.exchange.fetch_total_balances()
+        return self.broker.total_balances()
+
     # ---- one trading cycle ---------------------------------
     def cycle(self) -> None:
         assert self.exchange and self.om and self.broker
@@ -199,19 +214,20 @@ class Bot:
             self.cfg.regime.get("candle_timeframe", "1h"),
             int(self.cfg.regime.get("candle_lookback", 300)))
 
-        sol, usdt = self.broker.balances() if self.mode != "live" \
-            else self.exchange.fetch_balances()
-        port_value = usdt + sol * snapshot.mid
+        free_sol, free_usdt = self._free_balances()
+        tot_sol, tot_usdt = self._equity_balances()
+        port_value = tot_usdt + tot_sol * snapshot.mid
 
         skip = self.risk.check_global(port_value, snapshot)
         if self.risk.state.halted:
             log.warning("HALTED: %s", self.risk.state.reason)
-            self._publish_status(sol, usdt, snapshot.mid, "HALTED",
+            self._publish_status(tot_sol, tot_usdt, snapshot.mid, "HALTED",
                                  self.risk.state.reason, "halted")
             return
         if skip:
             log.info("Skipping cycle: %s", skip)
-            self._publish_status(sol, usdt, snapshot.mid, "n/a", skip, "skipping")
+            self._publish_status(tot_sol, tot_usdt, snapshot.mid, "n/a",
+                                 skip, "skipping")
             return
 
         regime = classify(self.cfg, candles, snapshot)
@@ -220,16 +236,16 @@ class Bot:
         self._process_fills(snapshot)
 
         if regime.trade_allowed:
-            self._manage_grid(snapshot, candles, regime.regime, sol, usdt, port_value)
+            self._manage_grid(snapshot, candles, regime.regime,
+                              free_sol, free_usdt, port_value)
         else:
             self._handle_non_range(regime.regime, snapshot)
 
         self._maybe_rebalance(snapshot)
         self.risk.record_order_success()
 
-        sol, usdt = (self.broker.balances() if self.mode != "live"
-                     else self.exchange.fetch_balances())
-        self._publish_status(sol, usdt, snapshot.mid, regime.regime.value,
+        tot_sol, tot_usdt = self._equity_balances()
+        self._publish_status(tot_sol, tot_usdt, snapshot.mid, regime.regime.value,
                              regime.detail, "running")
 
     def _publish_status(self, sol: float, usdt: float, price: float,
@@ -347,8 +363,7 @@ class Bot:
         convertible = accumulation.profit_to_convert(self.cfg, realized) - already
         if convertible >= self.cfg.order.get("min_order_size_usdt", 5.0):
             amount = convertible / snapshot.mid
-            sol, usdt = (self.broker.balances() if self.mode != "live"
-                         else self.exchange.fetch_balances())
+            sol, usdt = self._free_balances()
             ok, reason = self.risk.allow_order(
                 OrderSide.BUY, amount, snapshot.ask, sol, usdt,
                 self.om.inv.grid_sol, self.om.deployed_usdt, len(self.om.open_orders))

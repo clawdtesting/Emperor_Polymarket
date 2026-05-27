@@ -1,0 +1,51 @@
+# Render Blueprint for the SOL accumulation grid bot web console.
+# One web service runs the dashboard AND the trading loop (single worker).
+#
+# Deploy: push this repo, then in Render choose "New > Blueprint" and point it
+# at the repo. Set the secret env vars (marked sync:false) in the dashboard.
+services:
+  - type: web
+    name: sol-grid-bot
+    runtime: python
+    plan: starter            # paid: free instances sleep, which stops trading
+    buildCommand: pip install -r requirements.txt
+    # Exactly ONE worker: each worker would spawn its own trading loop.
+    startCommand: gunicorn --workers 1 --threads 4 --timeout 120 src.web.wsgi:app
+    healthCheckPath: /healthz
+    autoDeploy: false
+    disk:
+      name: bot-state
+      mountPath: /var/data    # persistent SQLite + logs survive restarts/deploys
+      sizeGB: 1
+    envVars:
+      # --- safety: paper by default; flip both to go live -----
+      - key: RUN_MODE
+        value: paper
+      - key: LIVE_TRADING
+        value: "false"
+      # --- persistent paths on the mounted disk ---------------
+      - key: DB_PATH
+        value: /var/data/bot_state.sqlite3
+      - key: KILL_SWITCH_FILE
+        value: /var/data/KILL_SWITCH
+      - key: LOG_FILE
+        value: /var/data/bot.log
+      - key: CONFIG_FILE
+        value: config/config.yaml
+      # --- secrets: set these in the Render dashboard ---------
+      - key: CONSOLE_PASSWORD
+        sync: false
+      - key: CONSOLE_SECRET
+        sync: false
+      - key: EXCHANGE
+        value: hyperliquid
+      - key: HYPERLIQUID_WALLET_ADDRESS
+        sync: false
+      - key: HYPERLIQUID_PRIVATE_KEY
+        sync: false
+      - key: HYPERLIQUID_TESTNET
+        value: "true"
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false

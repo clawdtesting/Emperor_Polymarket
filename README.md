@@ -160,7 +160,58 @@ python bot.py status          # snapshot of metrics, regime, risk
 python bot.py report          # same as status
 python bot.py cancel-all      # cancel all open orders
 python bot.py emergency-stop  # create the kill switch file -> bot halts
+python bot.py web             # launch the browser console (see below)
 ```
+
+---
+
+## Web console (control from a browser instead of the terminal)
+
+Run the bot as a single hosted service with a password-protected dashboard:
+the trading loop runs in a background thread inside the same process, and the
+dashboard lets you view live state and trigger actions.
+
+```bash
+export CONSOLE_PASSWORD=choose-a-strong-password
+python bot.py web                 # serves on http://0.0.0.0:8000
+```
+
+Sign in with `CONSOLE_PASSWORD` and you get:
+
+- **Live metrics** — NET SOL accumulated, SOL/USDT balances, price, realized
+  PnL, total value (auto-refreshes every 5s)
+- **Regime + state** — current market regime and whether the loop is running,
+  paused, skipping, or halted
+- **Open orders** table and a **logs** tail
+- **Action buttons** — Pause, Resume, Convert profit → SOL, Cancel all orders,
+  **Emergency stop** (kill switch), Clear kill switch
+
+Actions are applied safely at cycle boundaries by the loop thread, so the
+console never races the trader. API endpoints (`/api/status`, `/api/logs`,
+`/api/action/<name>`) also accept `Authorization: Bearer <CONSOLE_PASSWORD>`.
+
+> The console controls real trading in live mode — always set a strong
+> `CONSOLE_PASSWORD` (and a fixed `CONSOLE_SECRET` in production). Without
+> `CONSOLE_PASSWORD`, logins are refused.
+
+### Deploy to Render
+
+A `render.yaml` Blueprint is included (one **web** service, single worker, with
+a 1 GB persistent disk at `/var/data` for SQLite state, logs, and the kill
+switch so they survive restarts/deploys).
+
+1. Push this repo to GitHub.
+2. In Render: **New → Blueprint**, select the repo (it reads `render.yaml`).
+3. Set the secret env vars in the dashboard (marked `sync: false`):
+   `CONSOLE_PASSWORD`, `CONSOLE_SECRET`, and — only when going live —
+   `HYPERLIQUID_WALLET_ADDRESS` / `HYPERLIQUID_PRIVATE_KEY`.
+4. Deploy, open the service URL, and sign in.
+
+Defaults are **paper mode** (`RUN_MODE=paper`, `LIVE_TRADING=false`). To go
+live, flip both in the Render env and redeploy. Use a paid plan — free
+instances sleep, which would stop the trader. The server runs with **exactly
+one worker** by design: more workers would spawn multiple trading loops.
+Render injects `PORT` and the console binds it automatically.
 
 ---
 

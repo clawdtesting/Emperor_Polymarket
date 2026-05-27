@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
 _CONFIGURED = False
 
 
-def setup_logging(level: str = "INFO", log_file: str = "logs/bot.log") -> logging.Logger:
+def setup_logging(level: str = "INFO", log_file: str | None = None) -> logging.Logger:
+    log_file = log_file or os.getenv("LOG_FILE", "logs/bot.log")
     global _CONFIGURED
     logger = logging.getLogger("solgrid")
     if _CONFIGURED:

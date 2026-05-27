@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import logging
 import signal
+import threading
 import time
+from pathlib import Path
 from typing import Optional
 
 from .alerts.logger import setup_logging
@@ -42,19 +44,85 @@ class Bot:
         self.notifier = TelegramNotifier(
             cfg.env.telegram_token, cfg.env.telegram_chat_id, cfg.env.telegram_enabled)
         self._running = True
+        self.paused = False
 
         self.exchange: Optional[Exchange] = None
         self.broker = None
         self.om: Optional[OrderManager] = None
         self._last_rebalance = 0.0
 
+        # Thread-safe control surface for the web console.
+        self._cmd_lock = threading.Lock()
+        self._commands: list[str] = []
+        self._snap_lock = threading.Lock()
+        self.status_snapshot: dict[str, object] = {"state": "starting"}
+
     # ---- lifecycle -----------------------------------------
     def _install_signal_handlers(self) -> None:
+        # signal handlers can only be set from the main thread; the web
+        # console runs the loop in a background thread, so guard for that.
+        if threading.current_thread() is not threading.main_thread():
+            return
         def handler(signum, _frame):
             log.info("Received signal %s; shutting down gracefully", signum)
             self._running = False
         signal.signal(signal.SIGINT, handler)
         signal.signal(signal.SIGTERM, handler)
+
+    # ---- control surface (called from web console thread) ---
+    def pause(self) -> None:
+        self.paused = True
+        self.db.audit("INFO", "control", "paused via console")
+
+    def resume(self) -> None:
+        self.paused = False
+        self.db.audit("INFO", "control", "resumed via console")
+
+    def request_cancel_all(self) -> None:
+        with self._cmd_lock:
+            self._commands.append("cancel_all")
+
+    def request_convert(self) -> None:
+        with self._cmd_lock:
+            self._commands.append("convert_now")
+
+    def engage_kill_switch(self) -> None:
+        Path(self.cfg.env.kill_switch_file).write_text("STOP\n", encoding="utf-8")
+        self.risk.halt("emergency stop via console")
+        self.db.audit("CRITICAL", "kill_switch", "emergency stop via console")
+
+    def clear_kill_switch(self) -> None:
+        try:
+            Path(self.cfg.env.kill_switch_file).unlink()
+        except FileNotFoundError:
+            pass
+        self.risk.state.halted = False
+        self.risk.state.reason = ""
+        self.db.audit("INFO", "control", "kill switch cleared via console")
+
+    def stop(self) -> None:
+        self._running = False
+
+    def _drain_commands(self) -> None:
+        with self._cmd_lock:
+            pending, self._commands = self._commands, []
+        for cmd in pending:
+            try:
+                if cmd == "cancel_all" and self.om:
+                    n = self.om.cancel_all()
+                    log.info("console cancel_all: cancelled %d orders", n)
+                elif cmd == "convert_now":
+                    self._last_rebalance = 0.0  # force conversion next rebalance
+            except Exception as exc:  # pragma: no cover - defensive
+                log.exception("command %s failed: %s", cmd, exc)
+
+    def _set_snapshot(self, data: dict[str, object]) -> None:
+        with self._snap_lock:
+            self.status_snapshot = data
+
+    def get_snapshot(self) -> dict[str, object]:
+        with self._snap_lock:
+            return dict(self.status_snapshot)
 
     def setup(self) -> None:
         live = self.mode == "live"
@@ -97,7 +165,11 @@ class Bot:
         log.info("Engine running in %s mode (poll=%ss)", self.mode, poll)
         while self._running:
             try:
-                self.cycle()
+                self._drain_commands()
+                if self.paused:
+                    self._set_snapshot({**self.get_snapshot(), "state": "paused"})
+                else:
+                    self.cycle()
             except Exception as exc:  # never let one cycle kill the loop
                 log.exception("cycle error: %s", exc)
                 self.db.audit("ERROR", "cycle", str(exc))
@@ -134,9 +206,12 @@ class Bot:
         skip = self.risk.check_global(port_value, snapshot)
         if self.risk.state.halted:
             log.warning("HALTED: %s", self.risk.state.reason)
+            self._publish_status(sol, usdt, snapshot.mid, "HALTED",
+                                 self.risk.state.reason, "halted")
             return
         if skip:
             log.info("Skipping cycle: %s", skip)
+            self._publish_status(sol, usdt, snapshot.mid, "n/a", skip, "skipping")
             return
 
         regime = classify(self.cfg, candles, snapshot)
@@ -151,6 +226,35 @@ class Bot:
 
         self._maybe_rebalance(snapshot)
         self.risk.record_order_success()
+
+        sol, usdt = (self.broker.balances() if self.mode != "live"
+                     else self.exchange.fetch_balances())
+        self._publish_status(sol, usdt, snapshot.mid, regime.regime.value,
+                             regime.detail, "running")
+
+    def _publish_status(self, sol: float, usdt: float, price: float,
+                        regime: str, regime_detail: str, state: str) -> None:
+        assert self.om
+        m = metrics_mod.compute(self.cfg, self.db, self.om, sol, usdt, price)
+        last_err = self.db.last_error()
+        self._set_snapshot({
+            "state": state,
+            "mode": self.mode,
+            "paused": self.paused,
+            "halted": self.risk.state.halted,
+            "halt_reason": self.risk.state.reason,
+            "regime": regime,
+            "regime_detail": regime_detail,
+            "grid_range": f"{self.cfg.grid['lower_price']}-{self.cfg.grid['upper_price']}",
+            "metrics": m.as_dict(),
+            "open_orders": [
+                {"side": o.side.value, "price": o.price, "amount": o.amount,
+                 "grid_level": o.grid_level}
+                for o in self.om.open_orders
+            ],
+            "last_error": last_err["message"] if last_err else None,
+            "updated_ts": time.time(),
+        })
 
     def _process_fills(self, snapshot: MarketSnapshot) -> None:
         assert self.om and self.broker

@@ -123,6 +123,15 @@ class Exchange:
         usdt = float((bal.get(quote, {}) or {}).get("free", 0) or 0)
         return sol, usdt
 
+    def fetch_total_balances(self) -> tuple[float, float]:
+        """Total (free + used) balances. 'used' is funds locked in open orders,
+        so total equity does not drop merely because an order is resting."""
+        bal = self._client.fetch_balance()
+        base, quote = self._split_symbol()
+        sol = float((bal.get(base, {}) or {}).get("total", 0) or 0)
+        usdt = float((bal.get(quote, {}) or {}).get("total", 0) or 0)
+        return sol, usdt
+
     def fetch_open_orders(self) -> list[dict[str, Any]]:
         return self._client.fetch_open_orders(self.symbol)
 

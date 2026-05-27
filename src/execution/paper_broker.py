@@ -79,4 +79,18 @@ class PaperBroker:
         return filled
 
     def balances(self) -> tuple[float, float]:
+        """Free (unreserved) balances."""
         return self.sol, self.usdt
+
+    def reserved(self) -> tuple[float, float]:
+        """SOL/USDT currently locked in open orders."""
+        rusdt = sum(o.amount * o.price for o in self.open.values()
+                    if o.side == OrderSide.BUY)
+        rsol = sum(o.amount for o in self.open.values()
+                   if o.side == OrderSide.SELL)
+        return rsol, rusdt
+
+    def total_balances(self) -> tuple[float, float]:
+        """Free balances plus funds reserved in open orders (total equity)."""
+        rsol, rusdt = self.reserved()
+        return self.sol + rsol, self.usdt + rusdt

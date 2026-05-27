@@ -106,6 +106,15 @@ class Exchange:
         rows = self._client.fetch_ohlcv(self.symbol, timeframe=timeframe, limit=limit)
         return from_ccxt(rows)
 
+    def fetch_ohlcv_symbol(self, symbol: str, timeframe: str,
+                           limit: int) -> list[list[float]]:
+        """Raw OHLCV for an arbitrary symbol (used by the dashboard chart)."""
+        if not self._markets:
+            self.load_markets()
+        if symbol not in self._markets:
+            raise ExchangeError(f"symbol not available: {symbol}")
+        return self._client.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+
     def fetch_balances(self) -> tuple[float, float]:
         """Returns (sol, quote). Quote currency depends on the symbol."""
         bal = self._client.fetch_balance()

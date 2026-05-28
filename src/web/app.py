@@ -157,10 +157,11 @@ def create_app(project_root: Path | None = None) -> Flask:
     @require_auth
     def api_fills():
         # Entry/exit markers only exist for the traded symbol.
+        rows = list(read_db.fills())
         fills = [
             {"time": int(row["ts"]), "side": row["side"], "price": row["price"],
-             "amount": row["amount"]}
-            for row in read_db.fills()
+             "amount": row["amount"], "realized_pnl": row["realized_pnl"]}
+            for row in rows
         ]
         return jsonify({"symbol": cfg.symbol, "fills": fills})
 
@@ -253,6 +254,10 @@ DASHBOARD_HTML = """
  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 4px 0 10px}
  .buy{background:#3fb950}.sell{background:#f85149}
  .note{color:#8b949e;font-size:12px}
+ .tag{padding:2px 7px;border-radius:6px;font-size:11px;font-weight:600}
+ .tag.resting{background:#30363d;color:#c9d1d9}
+ .tag.entry{background:#1f6f33;color:#fff}
+ .tag.exit{background:#8e1519;color:#fff}
 </style>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 </head><body>
@@ -300,9 +305,20 @@ DASHBOARD_HTML = """
  <div id="chart"></div>
  <div class="legend" id="chartnote"></div>
 
- <div class="section">Open orders (<span id="oo_count">0</span>)</div>
- <table><thead><tr><th>Side</th><th>Price</th><th>Amount (SOL)</th><th>Level</th>
+ <div class="section">Grid position</div>
+ <div class="legend" id="position">-</div>
+
+ <div class="section">Resting limit orders (<span id="oo_count">0</span>)
+  <span class="note">— waiting to fill</span></div>
+ <table><thead><tr><th>Status</th><th>Side</th><th>Price</th>
+  <th>Amount (SOL)</th><th>Distance</th><th>Level</th>
   </tr></thead><tbody id="orders"></tbody></table>
+
+ <div class="section">Filled trades (<span id="fl_count">0</span>)
+  <span class="note">— executed entries &amp; exits</span></div>
+ <table><thead><tr><th>Time</th><th>Type</th><th>Price</th>
+  <th>Amount (SOL)</th><th>Realized PnL</th>
+  </tr></thead><tbody id="trades"></tbody></table>
 
  <div class="section">Logs</div>
  <pre id="logs">loading…</pre>
@@ -336,15 +352,45 @@ async function refresh(){
   const st=document.getElementById('state');
   st.textContent=(s.state||'-')+(s.halted?' (HALTED)':'');
   st.className='pill '+(s.halted?'bad':(s.paused?'warn':'ok'));
+  // grid position summary
+  const held=m.grid_sol||0, avg=m.grid_avg_cost||0, up=m.unrealized_pnl_usdt||0;
+  document.getElementById('position').innerHTML = held>0
+   ? `Holding <b>${fmt(held,4)} SOL</b> bought at avg <b>${fmt(avg,4)}</b> · `+
+     `unrealized <span class="${cls(up)}">${up>=0?'+':''}${fmt(up,4)} USDT</span> · `+
+     `${(s.open_orders||[]).filter(o=>o.side==='sell').length} sell order(s) staged to exit`
+   : 'No grid SOL held yet — all capital is in resting buy orders / reserve.';
+
+  const px=m.price||0;
   const oo=s.open_orders||[];
   document.getElementById('oo_count').textContent=oo.length;
-  document.getElementById('orders').innerHTML=oo.map(o=>
-   `<tr><td>${o.side}</td><td>${fmt(o.price,4)}</td>`+
-   `<td>${fmt(o.amount,4)}</td><td>${o.grid_level??'-'}</td></tr>`).join('');
+  document.getElementById('orders').innerHTML=oo.map(o=>{
+   const dist=px?((o.price-px)/px*100):0;
+   const role=o.side==='buy'?'entry @ dip':'exit @ rise';
+   return `<tr><td><span class="tag resting">RESTING</span></td>`+
+    `<td>${o.side} <span class="note">(${role})</span></td>`+
+    `<td>${fmt(o.price,4)}</td><td>${fmt(o.amount,4)}</td>`+
+    `<td class="${cls(dist)}">${dist>=0?'+':''}${fmt(dist,2)}%</td>`+
+    `<td>${o.grid_level??'-'}</td></tr>`;
+  }).join('');
   latestOrders=oo; latestRange=s.active_range||null;
   drawGrid();
   document.getElementById('updated').textContent=new Date().toLocaleTimeString();
  }catch(e){/* transient */}
+ try{
+  const f=await (await fetch('/api/fills')).json();
+  const fills=(f.fills||[]).slice().reverse();
+  document.getElementById('fl_count').textContent=fills.length;
+  document.getElementById('trades').innerHTML=fills.slice(0,25).map(x=>{
+   const buy=x.side==='buy';
+   const t=new Date(x.time*1000).toLocaleString();
+   const pnl=x.realized_pnl||0;
+   const pnlc=buy?'':('<span class="'+cls(pnl)+'">'+(pnl>=0?'+':'')+fmt(pnl,4)+'</span>');
+   return `<tr><td class="note">${t}</td>`+
+    `<td><span class="tag ${buy?'entry':'exit'}">${buy?'ENTRY (buy)':'EXIT (sell)'}</span></td>`+
+    `<td>${fmt(x.price,4)}</td><td>${fmt(x.amount,4)}</td>`+
+    `<td>${buy?'<span class="note">—</span>':pnlc}</td></tr>`;
+  }).join('');
+ }catch(e){}
  try{
   const l=await (await fetch('/api/logs')).json();
   const pre=document.getElementById('logs');

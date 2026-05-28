@@ -193,6 +193,11 @@ Sign in with `CONSOLE_PASSWORD` and you get:
   orders** toggle overlays the open buy/sell limit orders as dashed price lines
   (green = buy, red = sell) plus the active grid range, so you can see exactly
   where the grid is resting relative to price.
+- **Grid position & orders** — a position summary (SOL held, avg cost,
+  unrealized PnL, staged exits), a **Resting limit orders** table (status,
+  side, price, distance from price, level) for orders still waiting to fill,
+  and a **Filled trades** table of executed entries/exits with realized PnL.
+  Timeframes include 3m/5m/15m/1h/4h/1d.
 
 Actions are applied safely at cycle boundaries by the loop thread, so the
 console never races the trader. API endpoints (`/api/status`, `/api/logs`,

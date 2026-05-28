@@ -10,6 +10,7 @@ import hmac
 import os
 import secrets
 import threading
+import time
 from collections import deque
 from pathlib import Path
 
@@ -22,6 +23,50 @@ from ..storage.db import Database
 from .controller import BotController
 
 LOG_FILE = os.getenv("LOG_FILE", "logs/bot.log")
+
+# Curated, user-editable settings exposed in the console.
+SETTINGS_SCHEMA = [
+    {"key": "grid.count", "label": "Grid levels", "type": "int",
+     "min": 2, "max": 50},
+    {"key": "grid.spacing_mode", "label": "Spacing", "type": "enum",
+     "options": ["arithmetic", "geometric", "atr"]},
+    {"key": "grid.range_min_width_pct", "label": "Min range width %",
+     "type": "float", "min": 0.5, "max": 50},
+    {"key": "grid.range_recalc_interval_sec", "label": "Range recalc (sec)",
+     "type": "int", "min": 60, "max": 86400},
+    {"key": "order.size_mode", "label": "Order size mode", "type": "enum",
+     "options": ["fixed_usdt", "fixed_sol", "portfolio_percent"]},
+    {"key": "order.fixed_usdt", "label": "Order size (USDT)", "type": "float",
+     "min": 1, "max": 100000},
+    {"key": "risk.profile", "label": "Risk profile", "type": "enum",
+     "options": ["low", "medium", "high"]},
+    {"key": "accumulation.profit_conversion_mode", "label": "Profit conversion",
+     "type": "enum", "options": ["none", "partial_to_SOL", "full_to_SOL"]},
+    {"key": "accumulation.profit_conversion_percent", "label": "Conversion %",
+     "type": "float", "min": 0, "max": 100},
+    {"key": "accumulation.sell_reduction_factor", "label": "Uptrend sell factor",
+     "type": "float", "min": 0, "max": 1},
+]
+
+
+def _coerce_setting(spec: dict, val) -> tuple[bool, object]:
+    try:
+        if spec["type"] == "int":
+            v = int(val)
+        elif spec["type"] == "float":
+            v = float(val)
+        elif spec["type"] == "enum":
+            v = str(val)
+            return (v in spec["options"], v)
+        else:
+            return False, None
+    except (TypeError, ValueError):
+        return False, None
+    if "min" in spec and v < spec["min"]:
+        return False, v
+    if "max" in spec and v > spec["max"]:
+        return False, v
+    return True, v
 
 
 def _check_password(supplied: str) -> bool:
@@ -165,6 +210,71 @@ def create_app(project_root: Path | None = None) -> Flask:
         ]
         return jsonify({"symbol": cfg.symbol, "fills": fills})
 
+    @app.route("/api/history")
+    @require_auth
+    def api_history():
+        rows = read_db.equity_history(2000)
+        return jsonify({"points": [
+            {"time": int(r["ts"]), "net_sol": r["net_sol"],
+             "total_value": r["total_value_usdt"], "price": r["price"]}
+            for r in rows
+        ]})
+
+    @app.route("/api/stats")
+    @require_auth
+    def api_stats():
+        fills = list(read_db.fills())
+        sells = [f for f in fills if f["side"] == "sell"]
+        total_fees = sum(f["fee"] for f in fills)
+        realized = [f["realized_pnl"] for f in sells]
+        wins = [p for p in realized if p > 0]
+        round_trips = len(sells)
+        started = float(read_db.get_meta("started_ts", time.time()) or time.time())
+        days = max((time.time() - started) / 86400.0, 1e-6)
+        snap = controller.status()
+        m = snap.get("metrics", {}) if isinstance(snap, dict) else {}
+        net_sol = float(m.get("net_sol_accumulated", 0.0) or 0.0)
+        return jsonify({
+            "fills": len(fills),
+            "round_trips": round_trips,
+            "total_fees_usdt": round(total_fees, 4),
+            "total_realized_usdt": round(sum(realized), 4),
+            "win_rate_pct": round(100 * len(wins) / round_trips, 1) if round_trips else 0.0,
+            "avg_profit_usdt": round(sum(realized) / round_trips, 4) if round_trips else 0.0,
+            "sol_per_day": round(net_sol / days, 6),
+            "days_running": round(days, 2),
+        })
+
+    @app.route("/api/settings", methods=["GET", "POST"])
+    @require_auth
+    def api_settings():
+        if request.method == "GET":
+            raw = controller.bot.cfg.raw
+            out = []
+            for spec in SETTINGS_SCHEMA:
+                sec, _, fld = spec["key"].partition(".")
+                out.append({**spec, "value": (raw.get(sec, {}) or {}).get(fld)})
+            return jsonify({"settings": out})
+        # POST: validate and apply.
+        payload = request.get_json(silent=True) or {}
+        overrides, errors = {}, []
+        by_key = {s["key"]: s for s in SETTINGS_SCHEMA}
+        for key, val in payload.items():
+            spec = by_key.get(key)
+            if spec is None:
+                errors.append(f"unknown setting {key}")
+                continue
+            ok, coerced = _coerce_setting(spec, val)
+            if not ok:
+                errors.append(f"invalid value for {key}: {val}")
+            else:
+                overrides[key] = coerced
+        if errors:
+            return jsonify({"error": "; ".join(errors)}), 400
+        if overrides:
+            controller.apply_settings(overrides)
+        return jsonify({"ok": True, "applied": overrides})
+
     @app.route("/api/action/<name>", methods=["POST"])
     @require_auth
     def api_action(name: str):
@@ -258,6 +368,13 @@ DASHBOARD_HTML = """
  .tag.resting{background:#30363d;color:#c9d1d9}
  .tag.entry{background:#1f6f33;color:#fff}
  .tag.exit{background:#8e1519;color:#fff}
+ .settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:10px;margin-bottom:8px}
+ .setting{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px}
+ .setting label{display:block;font-size:12px;color:#8b949e;margin-bottom:4px}
+ .setting input,.setting select{width:100%;background:#0d1117;color:#c9d1d9;
+  border:1px solid #30363d;border-radius:6px;padding:6px 8px;box-sizing:border-box}
+ .setting .key{font-size:10px;color:#6e7681;margin-top:4px}
 </style>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 </head><body>
@@ -304,6 +421,25 @@ DASHBOARD_HTML = """
  </div>
  <div id="chart"></div>
  <div class="legend" id="chartnote"></div>
+
+ <div class="section">Performance</div>
+ <div class="grid" id="statcards">
+  <div class="card"><div class="label">SOL / day</div><div class="val" id="st_solday">-</div></div>
+  <div class="card"><div class="label">Round-trips</div><div class="val" id="st_rt">-</div></div>
+  <div class="card"><div class="label">Win rate</div><div class="val" id="st_win">-</div></div>
+  <div class="card"><div class="label">Avg profit / trade</div><div class="val" id="st_avg">-</div></div>
+  <div class="card"><div class="label">Total realized</div><div class="val" id="st_real">-</div></div>
+  <div class="card"><div class="label">Total fees</div><div class="val" id="st_fees">-</div></div>
+ </div>
+ <div class="legend">NET SOL accumulated (green) &amp; total value in USDT (blue) over time</div>
+ <div id="eqchart" style="height:240px"></div>
+
+ <div class="section">Settings <span class="note">— applied live at the next cycle</span></div>
+ <div id="settings" class="settings"></div>
+ <div class="btns">
+  <button class="green" id="savebtn" onclick="saveSettings()">Save settings</button>
+  <span class="note" id="settingsmsg"></span>
+ </div>
 
  <div class="section">Grid position</div>
  <div class="legend" id="position">-</div>
@@ -537,6 +673,87 @@ async function initTokens(){
  loadChart();
  setInterval(loadChart,30000);
 }
+// ---------- stats ----------
+async function loadStats(){
+ try{
+  const s=await (await fetch('/api/stats')).json();
+  document.getElementById('st_solday').textContent=(s.sol_per_day>=0?'+':'')+fmt(s.sol_per_day,6);
+  document.getElementById('st_solday').className='val '+cls(s.sol_per_day);
+  document.getElementById('st_rt').textContent=s.round_trips;
+  document.getElementById('st_win').textContent=fmt(s.win_rate_pct,1)+'%';
+  document.getElementById('st_avg').textContent=(s.avg_profit_usdt>=0?'+':'')+fmt(s.avg_profit_usdt,4);
+  document.getElementById('st_avg').className='val '+cls(s.avg_profit_usdt);
+  document.getElementById('st_real').textContent=(s.total_realized_usdt>=0?'+':'')+fmt(s.total_realized_usdt,4);
+  document.getElementById('st_real').className='val '+cls(s.total_realized_usdt);
+  document.getElementById('st_fees').textContent=fmt(s.total_fees_usdt,4);
+ }catch(e){}
+}
+
+// ---------- equity curve ----------
+let eqChart,eqNetSeries,eqValSeries;
+function initEqChart(){
+ eqChart=LightweightCharts.createChart(document.getElementById('eqchart'),{
+  layout:{background:{color:'#161b22'},textColor:'#c9d1d9'},
+  grid:{vertLines:{color:'#21262d'},horzLines:{color:'#21262d'}},
+  rightPriceScale:{borderColor:'#30363d'},
+  leftPriceScale:{borderColor:'#30363d',visible:true},
+  timeScale:{borderColor:'#30363d',timeVisible:true,secondsVisible:false},
+  autoSize:true,
+ });
+ eqNetSeries=eqChart.addLineSeries({color:'#3fb950',lineWidth:2,priceScaleId:'right',
+  title:'NET SOL'});
+ eqValSeries=eqChart.addLineSeries({color:'#58a6ff',lineWidth:1,priceScaleId:'left',
+  title:'Value (USDT)'});
+}
+async function loadEquity(){
+ try{
+  const h=await (await fetch('/api/history')).json();
+  const pts=h.points||[];
+  if(!pts.length)return;
+  eqNetSeries.setData(pts.map(p=>({time:p.time,value:p.net_sol})));
+  eqValSeries.setData(pts.map(p=>({time:p.time,value:p.total_value})));
+  eqChart.timeScale().fitContent();
+ }catch(e){}
+}
+
+// ---------- settings ----------
+async function loadSettings(){
+ const r=await (await fetch('/api/settings')).json();
+ const el=document.getElementById('settings');
+ el.innerHTML=(r.settings||[]).map(s=>{
+  let inp;
+  if(s.type==='enum'){
+   inp=`<select data-key="${s.key}">`+s.options.map(o=>
+    `<option value="${o}" ${o===s.value?'selected':''}>${o}</option>`).join('')+'</select>';
+  }else{
+   const step=s.type==='int'?'1':'any';
+   inp=`<input data-key="${s.key}" type="number" step="${step}" `+
+    `value="${s.value??''}" min="${s.min??''}" max="${s.max??''}">`;
+  }
+  return `<div class="setting"><label>${s.label}</label>${inp}`+
+   `<div class="key">${s.key}</div></div>`;
+ }).join('');
+}
+async function saveSettings(){
+ const inputs=document.querySelectorAll('#settings [data-key]');
+ const payload={};
+ inputs.forEach(i=>{payload[i.dataset.key]=i.value;});
+ const msg=document.getElementById('settingsmsg');
+ msg.textContent='saving…';
+ try{
+  const r=await fetch('/api/settings',{method:'POST',
+   headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const j=await r.json();
+  if(!r.ok){msg.textContent='error: '+(j.error||r.status);return;}
+  msg.textContent='applied — takes effect next cycle';
+  setTimeout(()=>{msg.textContent='';},5000);
+ }catch(e){msg.textContent='error: '+e.message;}
+}
+
 initTokens();
+initEqChart();
+loadStats();loadEquity();loadSettings();
+setInterval(loadStats,15000);
+setInterval(loadEquity,60000);
 </script></body></html>
 """

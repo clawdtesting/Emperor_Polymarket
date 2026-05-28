@@ -50,6 +50,13 @@ CREATE TABLE IF NOT EXISTS audit (
     message TEXT NOT NULL,
     ts REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS equity_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts REAL NOT NULL,
+    net_sol REAL NOT NULL,
+    total_value_usdt REAL NOT NULL,
+    price REAL NOT NULL
+);
 """
 
 
@@ -185,3 +192,20 @@ class Database:
             "SELECT * FROM audit WHERE level IN ('ERROR','CRITICAL') "
             "ORDER BY ts DESC LIMIT 1"
         ).fetchone()
+
+    # ---- equity history ------------------------------------
+    def record_equity(self, net_sol: float, total_value_usdt: float,
+                      price: float) -> None:
+        self.conn.execute(
+            "INSERT INTO equity_history(ts, net_sol, total_value_usdt, price)"
+            " VALUES(?,?,?,?)",
+            (time.time(), net_sol, total_value_usdt, price),
+        )
+        self.conn.commit()
+
+    def equity_history(self, limit: int = 1000) -> list[sqlite3.Row]:
+        rows = self.conn.execute(
+            "SELECT * FROM equity_history ORDER BY ts DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return list(reversed(rows))
+

@@ -307,11 +307,12 @@ DASHBOARD_HTML = """
 
  <div class="section">Grid position</div>
  <div class="legend" id="position">-</div>
+ <div class="legend" id="target">-</div>
 
- <div class="section">Resting limit orders (<span id="oo_count">0</span>)
-  <span class="note">— waiting to fill</span></div>
- <table><thead><tr><th>Status</th><th>Side</th><th>Price</th>
-  <th>Amount (SOL)</th><th>Distance</th><th>Level</th>
+ <div class="section">Grid ladder (<span id="oo_count">0</span> resting orders)
+  <span class="note">— each rung: buy low, sell one step up</span></div>
+ <table><thead><tr><th>Rung</th><th>Buy @</th><th>Sell @</th>
+  <th>Target %</th><th>Amount (SOL)</th><th>Distance</th><th>Resting now</th>
   </tr></thead><tbody id="orders"></tbody></table>
 
  <div class="section">Filled trades (<span id="fl_count">0</span>)
@@ -360,18 +361,35 @@ async function refresh(){
      `${(s.open_orders||[]).filter(o=>o.side==='sell').length} sell order(s) staged to exit`
    : 'No grid SOL held yet — all capital is in resting buy orders / reserve.';
 
+  // per-rung profit target
+  document.getElementById('target').innerHTML = s.step_pct
+   ? `Per-rung target: <b>${fmt(s.step_pct,2)}%</b> gross `+
+     `(≈ <b>${fmt(s.net_step_pct,2)}%</b> net of fees) per buy→sell round-trip.`
+   : '';
+
   const px=m.price||0;
   const oo=s.open_orders||[];
   document.getElementById('oo_count').textContent=oo.length;
-  document.getElementById('orders').innerHTML=oo.map(o=>{
-   const dist=px?((o.price-px)/px*100):0;
-   const role=o.side==='buy'?'entry @ dip':'exit @ rise';
-   return `<tr><td><span class="tag resting">RESTING</span></td>`+
-    `<td>${o.side} <span class="note">(${role})</span></td>`+
-    `<td>${fmt(o.price,4)}</td><td>${fmt(o.amount,4)}</td>`+
+  // Build a paired ladder from the grid levels: each rung = buy(lower)+sell(upper).
+  const levels=(s.grid_levels||[]).slice().sort((a,b)=>a-b);
+  const near=(price,side)=>oo.find(o=>o.side===side&&Math.abs(o.price-price)<1e-3);
+  let rows='';
+  for(let i=0;i<levels.length-1;i++){
+   const lo=levels[i], hi=levels[i+1];
+   const tgt=(hi-lo)/lo*100;
+   const b=near(lo,'buy'), sl=near(hi,'sell');
+   if(!b&&!sl) continue;
+   const amt=(b&&b.amount)||(sl&&sl.amount)||0;
+   const dist=px?((lo-px)/px*100):0;
+   const badges=(b?'<span class="tag entry">BUY</span> ':'')+
+                (sl?'<span class="tag exit">SELL</span>':'')||'<span class="note">—</span>';
+   rows+=`<tr><td>${i}</td><td>${fmt(lo,4)}</td><td>${fmt(hi,4)}</td>`+
+    `<td class="pos">+${fmt(tgt,2)}%</td><td>${fmt(amt,4)}</td>`+
     `<td class="${cls(dist)}">${dist>=0?'+':''}${fmt(dist,2)}%</td>`+
-    `<td>${o.grid_level??'-'}</td></tr>`;
-  }).join('');
+    `<td>${badges}</td></tr>`;
+  }
+  document.getElementById('orders').innerHTML=rows||
+   '<tr><td colspan="7" class="note">No resting grid orders.</td></tr>';
   latestOrders=oo; latestRange=s.active_range||null;
   drawGrid();
   document.getElementById('updated').textContent=new Date().toLocaleTimeString();

@@ -53,6 +53,7 @@ class Bot:
         self._grid_range_cache: Optional[tuple[float, float]] = None
         self._grid_range_ts = 0.0
         self._active_range: Optional[tuple[float, float]] = None
+        self._last_levels: list[float] = []
 
         # Thread-safe control surface for the web console.
         self._cmd_lock = threading.Lock()
@@ -256,6 +257,14 @@ class Bot:
         assert self.om
         m = metrics_mod.compute(self.cfg, self.db, self.om, sol, usdt, price)
         last_err = self.db.last_error()
+        levels = self._last_levels
+        step_pct = net_step_pct = 0.0
+        if len(levels) >= 2 and price > 0:
+            diffs = [levels[i + 1] - levels[i] for i in range(len(levels) - 1)]
+            avg_step = sum(diffs) / len(diffs)
+            step_pct = avg_step / price * 100.0
+            fee = float(self.cfg.backtest.get("fee_rate", 0.00035))
+            net_step_pct = step_pct - 2 * fee * 100.0
         self._set_snapshot({
             "state": state,
             "mode": self.mode,
@@ -270,6 +279,9 @@ class Bot:
             "active_range": (list(self._active_range) if self._active_range
                              else [float(self.cfg.grid["lower_price"]),
                                    float(self.cfg.grid["upper_price"])]),
+            "grid_levels": levels,
+            "step_pct": round(step_pct, 3),
+            "net_step_pct": round(net_step_pct, 3),
             "metrics": m.as_dict(),
             "open_orders": [
                 {"side": o.side.value, "price": o.price, "amount": o.amount,
@@ -328,6 +340,7 @@ class Bot:
 
         spec = grid.build_levels(self.cfg, snapshot.mid, candles,
                                  range_override=(lower, upper))
+        self._last_levels = sorted(round(l.price, 4) for l in spec.levels)
         max_active = int(self.cfg.order.get("max_active_orders", 12))
         for level in spec.levels:
             if len(self.om.open_orders) >= max_active:

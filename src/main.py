@@ -58,8 +58,10 @@ class Bot:
         # Thread-safe control surface for the web console.
         self._cmd_lock = threading.Lock()
         self._commands: list[str] = []
+        self._pending_settings: Optional[dict] = None
         self._snap_lock = threading.Lock()
         self.status_snapshot: dict[str, object] = {"state": "starting"}
+        self._last_equity_ts = 0.0
 
     # ---- lifecycle -----------------------------------------
     def _install_signal_handlers(self) -> None:
@@ -107,9 +109,19 @@ class Bot:
     def stop(self) -> None:
         self._running = False
 
+    def request_settings(self, overrides: dict) -> None:
+        """Queue a settings change (applied at the next cycle boundary)."""
+        with self._cmd_lock:
+            self._pending_settings = {**(self._pending_settings or {}), **overrides}
+        # Persist so changes survive restarts (DB lives on the Render disk).
+        stored = self.db.get_meta("config_overrides", {}) or {}
+        stored.update(overrides)
+        self.db.set_meta("config_overrides", stored)
+
     def _drain_commands(self) -> None:
         with self._cmd_lock:
             pending, self._commands = self._commands, []
+            settings, self._pending_settings = self._pending_settings, None
         for cmd in pending:
             try:
                 if cmd == "cancel_all" and self.om:
@@ -119,6 +131,24 @@ class Bot:
                     self._last_rebalance = 0.0  # force conversion next rebalance
             except Exception as exc:  # pragma: no cover - defensive
                 log.exception("command %s failed: %s", cmd, exc)
+        if settings:
+            self._apply_overrides(settings)
+
+    def _apply_overrides(self, overrides: dict) -> None:
+        """Merge dotted-key overrides (e.g. {'grid.count': 14}) into cfg in place."""
+        for dotted, value in overrides.items():
+            section, _, field = dotted.partition(".")
+            if not field:
+                continue
+            self.cfg.raw.setdefault(section, {})[field] = value
+        # Re-apply the selected risk profile and refresh cached config copies.
+        from .config import _apply_risk_profile
+        _apply_risk_profile(self.cfg.raw)
+        self.risk.cfg = self.cfg
+        self.risk.r = self.cfg.risk
+        self._grid_range_cache = None  # force range/grid recompute
+        log.info("Applied settings overrides: %s", overrides)
+        self.db.audit("INFO", "control", f"settings updated: {overrides}")
 
     def _set_snapshot(self, data: dict[str, object]) -> None:
         with self._snap_lock:
@@ -129,6 +159,10 @@ class Bot:
             return dict(self.status_snapshot)
 
     def setup(self) -> None:
+        # Re-apply any persisted settings overrides from a previous session.
+        stored = self.db.get_meta("config_overrides", {}) or {}
+        if stored:
+            self._apply_overrides(stored)
         live = self.mode == "live"
         self.exchange = Exchange(self.cfg, trading_enabled=live)
         self.exchange.load_markets()
@@ -257,6 +291,11 @@ class Bot:
         assert self.om
         m = metrics_mod.compute(self.cfg, self.db, self.om, sol, usdt, price)
         last_err = self.db.last_error()
+        # Record an equity-curve point at most once a minute.
+        now = time.time()
+        if now - self._last_equity_ts >= 60:
+            self.db.record_equity(m.net_sol_accumulated, m.total_value_usdt, price)
+            self._last_equity_ts = now
         levels = self._last_levels
         step_pct = net_step_pct = 0.0
         if len(levels) >= 2 and price > 0:

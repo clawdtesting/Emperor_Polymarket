@@ -68,3 +68,6 @@ class BotController:
 
     def clear_kill_switch(self) -> None:
         self.bot.clear_kill_switch()
+
+    def apply_settings(self, overrides: dict) -> None:
+        self.bot.request_settings(overrides)

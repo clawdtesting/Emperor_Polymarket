@@ -198,6 +198,13 @@ Sign in with `CONSOLE_PASSWORD` and you get:
   side, price, distance from price, level) for orders still waiting to fill,
   and a **Filled trades** table of executed entries/exits with realized PnL.
   Timeframes include 3m/5m/15m/1h/4h/1d.
+- **Performance** — cards for SOL/day, round-trips, win rate, average profit per
+  trade, total realized, and total fees; plus an equity curve charting NET SOL
+  accumulated and total value (USDT) over time.
+- **Editable settings** — change grid count/spacing, range width, range recalc
+  interval, order size mode/amount, risk profile, profit-conversion mode/%, and
+  uptrend sell factor live from the browser. Changes apply at the next cycle
+  and persist in the SQLite state (i.e. survive Render restarts).
 
 Actions are applied safely at cycle boundaries by the loop thread, so the
 console never races the trader. API endpoints (`/api/status`, `/api/logs`,

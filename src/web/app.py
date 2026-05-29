@@ -600,11 +600,14 @@ function initChart(){
  chart=LightweightCharts.createChart(el,{
   layout:{background:{color:'#161b22'},textColor:'#c9d1d9'},
   grid:{vertLines:{color:'#21262d'},horzLines:{color:'#21262d'}},
-  rightPriceScale:{borderColor:'#30363d'},
+  // Put the price axis (and therefore the BUY/SELL price-line labels) on the LEFT.
+  leftPriceScale:{borderColor:'#30363d',visible:true},
+  rightPriceScale:{visible:false},
   timeScale:{borderColor:'#30363d',timeVisible:true,secondsVisible:false},
   crosshair:{mode:0},autoSize:true,
  });
  series=chart.addCandlestickSeries({
+  priceScaleId:'left',
   upColor:'#3fb950',downColor:'#f85149',borderVisible:false,
   wickUpColor:'#3fb950',wickDownColor:'#f85149',
  });

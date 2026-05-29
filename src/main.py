@@ -62,6 +62,8 @@ class Bot:
         self._snap_lock = threading.Lock()
         self.status_snapshot: dict[str, object] = {"state": "starting"}
         self._last_equity_ts = 0.0
+        self._last_halt_log_ts = 0.0
+        self._last_halt_reason = ""
 
     # ---- lifecycle -----------------------------------------
     def _install_signal_handlers(self) -> None:
@@ -208,11 +210,12 @@ class Bot:
                     self._set_snapshot({**self.get_snapshot(), "state": "paused"})
                 else:
                     self.cycle()
-            except Exception as exc:  # never let one cycle kill the loop
+            except Exception as exc:
+                # Transient (network / exchange) errors must NOT trip the
+                # order-placement circuit breaker. Log + audit and move on;
+                # actual placement failures are counted inside _manage_grid.
                 log.exception("cycle error: %s", exc)
                 self.db.audit("ERROR", "cycle", str(exc))
-                if self.risk.record_order_error():
-                    self.notifier.send(f"Circuit breaker tripped: {exc}")
             self._sleep(poll)
         self.shutdown()
 
@@ -258,10 +261,12 @@ class Bot:
 
         skip = self.risk.check_global(port_value, snapshot)
         if self.risk.state.halted:
-            log.warning("HALTED: %s", self.risk.state.reason)
-            self._publish_status(tot_sol, tot_usdt, snapshot.mid, "HALTED",
-                                 self.risk.state.reason, "halted")
-            return
+            self._maybe_auto_resume()
+            if self.risk.state.halted:
+                self._log_halt_throttled(self.risk.state.reason)
+                self._publish_status(tot_sol, tot_usdt, snapshot.mid, "HALTED",
+                                     self.risk.state.reason, "halted")
+                return
         if skip:
             log.info("Skipping cycle: %s", skip)
             self._publish_status(tot_sol, tot_usdt, snapshot.mid, "n/a",
@@ -285,6 +290,38 @@ class Bot:
         tot_sol, tot_usdt = self._equity_balances()
         self._publish_status(tot_sol, tot_usdt, snapshot.mid, regime.regime.value,
                              regime.detail, "running")
+
+    def _log_halt_throttled(self, reason: str) -> None:
+        """Emit the HALTED warning at most once on transition and every 30 min."""
+        now = time.time()
+        if reason != self._last_halt_reason or now - self._last_halt_log_ts > 1800:
+            log.warning("HALTED: %s", reason)
+            self._last_halt_reason = reason
+            self._last_halt_log_ts = now
+
+    def _maybe_auto_resume(self) -> None:
+        """Auto-clear a tripped circuit breaker after a cooldown.
+
+        Honored only when the user did NOT engage the kill switch file: an
+        explicit emergency stop is always sticky."""
+        auto = float(self.cfg.risk.get("auto_resume_after_sec", 0) or 0)
+        if auto <= 0:
+            return
+        if Path(self.cfg.env.kill_switch_file).exists():
+            return
+        if self.risk.state.halted_ts <= 0:
+            return
+        if time.time() - self.risk.state.halted_ts < auto:
+            return
+        prev = self.risk.state.reason
+        self.risk.state.halted = False
+        self.risk.state.reason = ""
+        self.risk.state.halted_ts = 0.0
+        self.risk.state.consecutive_order_errors = 0
+        self._last_halt_reason = ""
+        log.info("Auto-resumed after cooldown (was: %s)", prev)
+        self.db.audit("INFO", "control", f"auto-resumed: {prev}")
+        self.notifier.send(f"Bot auto-resumed after cooldown (was halted: {prev}).")
 
     def _publish_status(self, sol: float, usdt: float, price: float,
                         regime: str, regime_detail: str, state: str) -> None:
@@ -401,7 +438,19 @@ class Bot:
             if not ok:
                 log.debug("skip level %.4f %s: %s", level.price, level.side.value, reason)
                 continue
-            self.om.place(level.side, amount, level.price, grid_level=level.index)
+            try:
+                self.om.place(level.side, amount, level.price, grid_level=level.index)
+                self.risk.record_order_success()
+            except Exception as exc:
+                # Genuine placement failure (rejected/insufficient/etc). Only
+                # these count toward the order-placement circuit breaker.
+                log.warning("order placement failed %s @ %.4f: %s",
+                            level.side.value, level.price, exc)
+                self.db.audit("ERROR", "order", f"place {level.side.value} "
+                              f"@ {level.price}: {exc}")
+                if self.risk.record_order_error():
+                    self.notifier.send(f"Circuit breaker tripped: {exc}")
+                    break
 
     def _handle_non_range(self, regime: Regime, snapshot: MarketSnapshot) -> None:
         """Breakout/breakdown/volatility handling: preserve inventory."""

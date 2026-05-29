@@ -15,6 +15,7 @@ from ..storage.models import OrderSide
 class RiskState:
     halted: bool = False
     reason: str = ""
+    halted_ts: float = 0.0
     daily_anchor_value: float = 0.0
     daily_anchor_ts: float = 0.0
     peak_value: float = 0.0
@@ -33,6 +34,8 @@ class RiskManager:
         return Path(self.cfg.env.kill_switch_file).exists()
 
     def halt(self, reason: str) -> None:
+        if not self.state.halted:
+            self.state.halted_ts = time.time()
         self.state.halted = True
         self.state.reason = reason
 

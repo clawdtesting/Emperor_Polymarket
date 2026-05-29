@@ -91,6 +91,10 @@ risk:
   max_spread_percent: 0.5
   price_gap_percent: 10.0          # single-tick jump that trips the breaker
   circuit_breaker_enabled: true
+  # Auto-clear a TRIPPED breaker after N seconds (0 = off, stays halted until
+  # the user clicks "Clear kill switch"). The kill-switch file is always
+  # honored — auto-resume never overrides an explicit emergency stop.
+  auto_resume_after_sec: 900
 
 # ---- Risk profile overrides (applied when risk.profile selected) ----
 risk_profiles:

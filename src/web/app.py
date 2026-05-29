@@ -40,6 +40,8 @@ SETTINGS_SCHEMA = [
      "min": 1, "max": 100000},
     {"key": "risk.profile", "label": "Risk profile", "type": "enum",
      "options": ["low", "medium", "high"]},
+    {"key": "risk.auto_resume_after_sec", "label": "Auto-resume after (sec, 0=off)",
+     "type": "int", "min": 0, "max": 86400},
     {"key": "accumulation.profit_conversion_mode", "label": "Profit conversion",
      "type": "enum", "options": ["none", "partial_to_SOL", "full_to_SOL"]},
     {"key": "accumulation.profit_conversion_percent", "label": "Conversion %",

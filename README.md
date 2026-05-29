@@ -233,6 +233,24 @@ instances sleep, which would stop the trader. The server runs with **exactly
 one worker** by design: more workers would spawn multiple trading loops.
 Render injects `PORT` and the console binds it automatically.
 
+### Keeping a free Render instance awake (for testing)
+
+A GitHub Actions workflow at `.github/workflows/keepalive.yml` pings
+`<your-service>/healthz` every 10 minutes from GitHub's infrastructure
+(external HTTP, so Render counts it as activity). To enable it:
+
+1. Copy your Render service URL from the dashboard
+   (e.g. `https://sol-grid-bot-xxxx.onrender.com`).
+2. In GitHub: **Settings → Secrets and variables → Actions → Variables tab →
+   New repository variable**, name `RENDER_URL`, value the URL.
+3. The workflow runs automatically on its schedule. You can also trigger it
+   manually from the Actions tab.
+
+Caveats: it does not eliminate cold-start latency, GitHub may skip the
+schedule after long repo inactivity, and Render free instances still get
+restarted by Render itself occasionally. For 24/7 live trading, pay for the
+Starter plan instead.
+
 ---
 
 ## Configuration reference

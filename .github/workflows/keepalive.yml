@@ -1,0 +1,54 @@
+# Keep the Render service warm by pinging /healthz from outside the network.
+# Render's free tier sleeps after ~15 min of no inbound external HTTP. An
+# internal self-ping would not count -- this workflow runs on GitHub's
+# infrastructure, so the request is external and counts as activity.
+#
+# Setup (one-time):
+#   1. Render dashboard -> your service -> copy the URL
+#      (e.g. https://sol-grid-bot-xxxx.onrender.com)
+#   2. GitHub repo -> Settings -> Secrets and variables -> Actions ->
+#      Variables tab -> "New repository variable":
+#        Name:  RENDER_URL
+#        Value: <paste the URL>
+#
+# Notes:
+#   * Cron is "*/10 * * * *" (every 10 min) -- well inside Render's 15-min
+#     sleep window even if GitHub's scheduler drifts a few minutes.
+#   * GitHub Actions scheduled workflows can be skipped after ~60 days of
+#     repo inactivity. If that happens, push any commit to re-arm.
+#   * For 24/7 trading with real funds, prefer paying for Render Starter
+#     instead -- this ping does not eliminate cold-start latency.
+
+name: keepalive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping /healthz
+        env:
+          URL: ${{ vars.RENDER_URL }}
+        run: |
+          if [ -z "$URL" ]; then
+            echo "::error::Set the RENDER_URL repository variable (Settings > Secrets and variables > Actions > Variables) to your Render service URL."
+            exit 1
+          fi
+          # Strip a trailing slash if present so we never call //healthz.
+          URL="${URL%/}"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            --max-time 30 --retry 3 --retry-delay 5 "$URL/healthz")
+          echo "GET $URL/healthz -> $code"
+          [ "$code" = "200" ]
